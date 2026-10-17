@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(db)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(db)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+
+    // Settings: read by signed-in users; writable by admin or first user bootstrap
+    match /settings/app {
+      allow read: if true;
+      allow write: if isAdmin() || (isSignedIn() && !exists(/databases/$(db)/documents/settings/app));
+    }
+
+    // CNIC Index: allows reading for login lookup
+    match /cnicIndex/{cnic} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // Users
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isSignedIn() && isOwner(uid);
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if isAdmin();
+
+      match /devices/{deviceId} {
+        allow read, write: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // Published content hierarchy
+    match /programs/{id}          { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /mbbsYears/{id}         { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /licensingPathways/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /subjects/{id}          { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /exams/{examId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+      match /questions/{qid} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+      }
+    }
+
+    // Exam private answers (correct choices & explanations): Admin only
+    match /examPrivate/{examId}/answers/{qid} {
+      allow read, write: if isAdmin();
+    }
+
+    // Access Requests
+    match /accessRequests/{id} {
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Membership Plans
+    match /membershipPlans/{id}   { allow read: if isSignedIn(); allow write: if isAdmin(); }
+
+    // Results
+    match /results/{id} {
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Offline Packs
+    match /offlinePacks/{id}      { allow read: if isSignedIn(); allow write: if isAdmin(); }
+  }
+}
