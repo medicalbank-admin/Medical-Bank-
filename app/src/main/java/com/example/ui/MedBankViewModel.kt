@@ -210,6 +210,29 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    private val _banner = MutableStateFlow(com.example.data.models.AppBanner())
+    val banner: StateFlow<com.example.data.models.AppBanner> = _banner.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            repository.observeBanner().collect { b ->
+                _banner.value = b
+            }
+        }
+    }
+
+    fun saveBanner(isActive: Boolean, message: String, buttonText: String, linkUrl: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.saveBanner(isActive, message, buttonText, linkUrl)
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.message ?: "Failed to save banner")
+            }
+        }
+    }
+
+
 
 
     init {

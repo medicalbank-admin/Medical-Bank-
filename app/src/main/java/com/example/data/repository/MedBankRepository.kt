@@ -2380,4 +2380,35 @@ class MedBankRepository(
             ))
         }
     }
+
+    fun observeBanner(): Flow<com.example.data.models.AppBanner> = callbackFlow {
+        val ref = firestore.collection("settings").document("banner")
+        val reg = ref.addSnapshotListener { snapshot, error ->
+            if (error != null || snapshot == null || !snapshot.exists()) {
+                trySend(com.example.data.models.AppBanner())
+                return@addSnapshotListener
+            }
+            val banner = com.example.data.models.AppBanner(
+                isActive = snapshot.getBoolean("isActive") ?: false,
+                message = snapshot.getString("message") ?: "",
+                buttonText = snapshot.getString("buttonText") ?: "Update Now",
+                linkUrl = snapshot.getString("linkUrl") ?: "",
+                updatedAt = snapshot.getTimestamp("updatedAt")?.toDate()?.time ?: System.currentTimeMillis()
+            )
+            trySend(banner)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun saveBanner(isActive: Boolean, message: String, buttonText: String, linkUrl: String) {
+        val data = mapOf(
+            "isActive" to isActive,
+            "message" to message,
+            "buttonText" to buttonText,
+            "linkUrl" to linkUrl,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        firestore.collection("settings").document("banner").set(data).await()
+    }
 }
+

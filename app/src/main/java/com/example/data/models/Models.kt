@@ -225,5 +225,14 @@ data class NotificationItem(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+data class AppBanner(
+    val isActive: Boolean = false,
+    val message: String = "",
+    val buttonText: String = "",
+    val linkUrl: String = "",
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+
 
 

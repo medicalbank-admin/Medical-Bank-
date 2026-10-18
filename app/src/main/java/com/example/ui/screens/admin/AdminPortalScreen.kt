@@ -52,6 +52,7 @@ enum class AdminSection {
     CONTENT,
     BULK_IMPORT,
     PLANS,
+    BANNER_CONTROL,
     LEGAL,
     SETTINGS
 }
@@ -128,6 +129,7 @@ fun AdminPortalScreen(viewModel: MedBankViewModel) {
                                 AdminSection.CONTENT -> "Content Hierarchy"
                                 AdminSection.BULK_IMPORT -> "Bulk Import"
                                 AdminSection.PLANS -> "Plans & Passes"
+                                AdminSection.BANNER_CONTROL -> "Banner Control"
                                 AdminSection.LEGAL -> "Legal Content"
                                 AdminSection.SETTINGS -> "App Config"
                             },
@@ -149,6 +151,7 @@ fun AdminPortalScreen(viewModel: MedBankViewModel) {
                 AdminSection.CONTENT -> AdminContentView(viewModel = viewModel)
                 AdminSection.BULK_IMPORT -> AdminBulkImportView(viewModel = viewModel)
                 AdminSection.PLANS -> AdminPlansView(viewModel = viewModel)
+                AdminSection.BANNER_CONTROL -> AdminBannerScreen(viewModel = viewModel)
                 AdminSection.LEGAL -> LegalContentScreen(viewModel = viewModel, onBack = { viewModel.setActiveAdminSection(AdminSection.DASHBOARD) })
                 AdminSection.SETTINGS -> AdminSettingsView(viewModel = viewModel)
             }

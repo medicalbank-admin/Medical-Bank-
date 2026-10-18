@@ -448,6 +448,17 @@ fun AdminProfileContent(viewModel: MedBankViewModel, user: User) {
                     modifier = Modifier.testTag("admin_menu_plans")
                 )
 
+                // Banner Control (Dynamic Banner)
+                MedBankListItem(
+                    title = "Banner Control",
+                    subtitle = "Manage update announcements and promotional banners",
+                    icon = Icons.Default.Campaign,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.navigateToAdminSection(AdminSection.BANNER_CONTROL) },
+                    modifier = Modifier.testTag("admin_menu_banner_control")
+                )
+
                 // Referral Payouts (Approve and mark paid)
                 MedBankListItem(
                     title = "Referral Payouts",

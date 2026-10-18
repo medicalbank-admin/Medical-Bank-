@@ -9,7 +9,15 @@ service cloud.firestore {
     }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
 
+    match /settings/banner {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
     match /settings/app {
+    match /settings/banner {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
       allow read: if true;
       allow write: if isAdmin() || (isSignedIn() && !exists(/databases/$(db)/documents/settings/app));
     }

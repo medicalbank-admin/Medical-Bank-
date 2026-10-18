@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -216,6 +217,96 @@ fun FolderTreeScreen(viewModel: MedBankViewModel) {
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
+
+                    val banner by viewModel.banner.collectAsState()
+                    val context = androidx.compose.ui.platform.LocalContext.current
+
+                    if (banner.isActive && banner.message.isNotBlank()) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("dynamic_announcement_banner"),
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.Transparent,
+                            shadowElevation = 4.dp
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        brush = Brush.horizontalGradient(
+                                            colors = listOf(BrandBlue, BrandDarkerBlue)
+                                        ),
+                                        shape = RoundedCornerShape(16.dp)
+                                    )
+                                    .padding(16.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Campaign,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = "Announcement",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = Color.White.copy(alpha = 0.9f),
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Text(
+                                        text = banner.message,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+
+                                    if (banner.linkUrl.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Button(
+                                            onClick = {
+                                                try {
+                                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(banner.linkUrl))
+                                                    context.startActivity(intent)
+                                                } catch (_: Exception) {}
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color.White,
+                                                contentColor = BrandBlue
+                                            ),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.testTag("banner_action_button")
+                                        ) {
+                                            Text(
+                                                text = banner.buttonText.ifBlank { "Update Now" },
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.OpenInNew,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
 
                     // MedBankBanner carousel showing announcements
                     val announcements = remember(appSettings.announcementBanner) {
