@@ -53,6 +53,10 @@ export const onUserCreate = functions.auth.user().onCreate(async (user) => {
     mbbsYear: null,
     licensingPath: null,
     entitlements: {},
+    referralCode: "MB" + Math.random().toString(36).substring(2, 6).toUpperCase(),
+    referredBy: null,
+    walletBalance: 0.0,
+    totalEarned: 0.0,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     lastLoginAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });

@@ -19,7 +19,11 @@ data class UserEntity(
     val licensingPath: String?,
     val entitlementsJson: String, // JSON map of scopeId -> Entitlement
     val createdAt: Long,
-    val lastLoginAt: Long
+    val lastLoginAt: Long,
+    val referralCode: String = "",
+    val referredBy: String? = null,
+    val walletBalance: Double = 0.0,
+    val totalEarned: Double = 0.0
 )
 
 @Entity(tableName = "cnic_index")

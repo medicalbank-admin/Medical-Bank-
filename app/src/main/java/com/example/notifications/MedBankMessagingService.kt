@@ -2,7 +2,6 @@ package com.example.notifications
 
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -13,32 +12,27 @@ class MedBankMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "Refreshed FCM token: $token")
-        
-        val currentUser = FirebaseAuth.getInstance().currentUser
-        if (currentUser != null) {
-            updateTokenInFirestore(currentUser.uid, token)
-        }
-    }
+        Log.d("FCM_TOKEN", "Refreshed FCM token: $token")
 
-    private fun updateTokenInFirestore(uid: String, token: String, retryCount: Int = 1) {
-        val firestore = FirebaseFirestore.getInstance()
-        val data = mapOf(
-            "fcmToken" to token,
-            "fcmTokenUpdatedAt" to FieldValue.serverTimestamp()
-        )
-        firestore.collection("users").document(uid)
-            .update(data)
-            .addOnSuccessListener {
-                Log.d(TAG, "FCM token updated successfully for $uid")
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to update FCM token (retry: $retryCount): ${e.message}")
-                if (retryCount > 0) {
-                    // Retry once
-                    updateTokenInFirestore(uid, token, retryCount - 1)
+        val currentUid = FirebaseAuth.getInstance().currentUser?.uid
+        if (currentUid != null) {
+            FirebaseFirestore.getInstance().collection("users").document(currentUid)
+                .update("fcmToken", token)
+                .addOnSuccessListener { Log.d("FCM_TOKEN", "Token saved to Firestore: $token") }
+                .addOnFailureListener { e -> Log.e("FCM_TOKEN", "Failed to save token", e) }
+
+            try {
+                val dbId = getString(com.example.R.string.firestore_database_id)
+                if (dbId.isNotBlank()) {
+                    FirebaseFirestore.getInstance(dbId).collection("users").document(currentUid)
+                        .update("fcmToken", token)
+                        .addOnSuccessListener { Log.d("FCM_TOKEN", "Token saved to Firestore: $token") }
+                        .addOnFailureListener { e -> Log.e("FCM_TOKEN", "Failed to save token", e) }
                 }
-            }
+            } catch (_: Exception) {}
+        } else {
+            Log.d("FCM_TOKEN", "User not logged in yet when onNewToken fired. Token will be saved on login.")
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {

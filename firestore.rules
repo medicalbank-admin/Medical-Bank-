@@ -9,10 +9,14 @@ service cloud.firestore {
     }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
 
-    // Settings: read by signed-in users; writable by admin or first user bootstrap
     match /settings/app {
       allow read: if true;
       allow write: if isAdmin() || (isSignedIn() && !exists(/databases/$(db)/documents/settings/app));
+    }
+
+    match /settings/legal {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // CNIC Index: allows reading for login lookup
@@ -22,14 +26,18 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Users
+    // Users: allow reading if signed in (for referral code lookup, referrer details, and profile)
     match /users/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && isOwner(uid);
       allow update: if isOwner(uid) || isAdmin();
       allow delete: if isAdmin();
 
       match /devices/{deviceId} {
+        allow read, write: if isOwner(uid) || isAdmin();
+      }
+
+      match /completedExams/{examId} {
         allow read, write: if isOwner(uid) || isAdmin();
       }
     }
@@ -48,9 +56,10 @@ service cloud.firestore {
       }
     }
 
-    // Exam private answers (correct choices & explanations): Admin only
+    // Exam private answers (correct choices & explanations): Admin or student who completed exam
     match /examPrivate/{examId}/answers/{qid} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin() || (isSignedIn() && exists(/databases/$(db)/documents/users/$(request.auth.uid)/completedExams/$(examId)));
+      allow write: if isAdmin();
     }
 
     // Access Requests
@@ -72,5 +81,12 @@ service cloud.firestore {
 
     // Offline Packs
     match /offlinePacks/{id}      { allow read: if isSignedIn(); allow write: if isAdmin(); }
+
+    // Referral Transactions
+    match /referralTransactions/{id} {
+      allow read: if isSignedIn() && (resource.data.referrerUid == request.auth.uid || resource.data.referredUid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
   }
 }

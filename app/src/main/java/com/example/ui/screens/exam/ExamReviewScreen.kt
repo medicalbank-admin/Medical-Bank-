@@ -133,7 +133,7 @@ fun ExamReviewScreen(viewModel: MedBankViewModel) {
                             .fillMaxWidth()
                             .height(50.dp)
                             .testTag("review_back_to_banks_button"),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = androidx.compose.foundation.shape.CircleShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
@@ -333,37 +333,41 @@ fun ExamReviewScreen(viewModel: MedBankViewModel) {
                             }
 
                             // High-Yield Clinical Explanation Box
-                            if (!privateAns?.explanation.isNullOrBlank()) {
-                                Spacer(modifier = Modifier.height(14.dp))
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Column(modifier = Modifier.padding(14.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                imageVector = Icons.Default.Lightbulb,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = "Clinical Explanation",
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.height(6.dp))
+                            val explanationText = explanations[q.id]?.takeIf { it.isNotBlank() }
+                                ?: privateAns?.explanation?.takeIf { it.isNotBlank() }
+                                ?: "No explanation provided."
+
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("explanation_card_${q.id}"),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lightbulb,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = privateAns.explanation,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            lineHeight = 22.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                            text = "Clinical Explanation",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
                                         )
                                     }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = explanationText,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        lineHeight = 22.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
                                 }
                             }
                         }

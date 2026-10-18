@@ -1,30 +1,28 @@
 package com.example.ui.screens.profile
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.MedBankViewModel
-import com.example.ui.components.StatusBadge
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.example.ui.components.MedBankCard
+import com.example.ui.components.MedBankChip
+import com.example.ui.components.MedBankListItem
+import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,34 +31,33 @@ fun ProfileScreen(viewModel: MedBankViewModel) {
     val user = currentUser
 
     if (user == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No user signed in.")
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AppBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("No user signed in.", color = TextSecondary)
         }
         return
     }
 
-    val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
+    var showLogoutConfirmation by remember { mutableStateOf(false) }
 
     Scaffold(
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
-                title = { 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(id = com.example.R.drawable.logo),
-                            contentDescription = "Medical Bank Logo",
-                            modifier = Modifier.height(28.dp),
-                            contentScale = ContentScale.Fit
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Candidate Profile", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-                    }
+                title = {
+                    Text(
+                        text = "Profile",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = CardSurface
                 )
             )
         }
@@ -68,231 +65,238 @@ fun ProfileScreen(viewModel: MedBankViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Image(
-                painter = painterResource(id = com.example.R.drawable.logo),
-                contentDescription = "Medical Bank Logo",
-                modifier = Modifier
-                    .height(40.dp)
-                    .fillMaxWidth(),
-                contentScale = ContentScale.Fit
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Avatar
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
+            // User Card: Avatar, Name, CNIC, and Role chip
+            MedBankCard(
+                padding = 20.dp,
+                modifier = Modifier.testTag("profile_user_card")
             ) {
-                Text(
-                    text = user.fullName.split(" ").mapNotNull { it.firstOrNull()?.toString() }.take(2).joinToString("").uppercase(),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 24.sp
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(BrandBlue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = user.fullName.split(" ")
+                                .mapNotNull { it.firstOrNull()?.toString() }
+                                .take(2)
+                                .joinToString("")
+                                .uppercase()
+                                .ifBlank { "MB" },
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 22.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = user.fullName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "CNIC: ${user.cnic}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        MedBankChip(
+                            text = if (user.role == "admin") "ADMINISTRATOR" else "CANDIDATE",
+                            color = if (user.role == "admin") BrandBlue else BrandSuccess,
+                            bgColor = if (user.role == "admin") BrandBluePastel else BrandSuccessPastel,
+                            icon = if (user.role == "admin") Icons.Default.Shield else Icons.Default.School
+                        )
+                    }
+                }
+            }
+
+            // Menu List using MedBankListItem inside a MedBankCard
+            MedBankCard(
+                padding = 10.dp
+            ) {
+                // Account Management
+                MedBankListItem(
+                    title = "Account Management",
+                    subtitle = "View full profile & personal information",
+                    icon = Icons.Default.Person,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.openProfileScreen("account") },
+                    modifier = Modifier.testTag("menu_account")
+                )
+
+                // Active Device
+                MedBankListItem(
+                    title = "Active Device",
+                    subtitle = "${viewModel.deviceModel} (1/1 Bound)",
+                    icon = Icons.Default.PhoneAndroid,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    trailingText = "Active",
+                    onClick = { viewModel.openProfileScreen("device") },
+                    modifier = Modifier.testTag("menu_device")
+                )
+
+                // Notification Preferences
+                MedBankListItem(
+                    title = "Notification Preferences",
+                    subtitle = "FCM announcements & approval alerts",
+                    icon = Icons.Default.Notifications,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.openProfileScreen("notifications") },
+                    modifier = Modifier.testTag("menu_notifications")
+                )
+
+                // App Tutorial
+                MedBankListItem(
+                    title = "App Tutorial",
+                    subtitle = "How to practice question banks & mock exams",
+                    icon = Icons.Default.HelpCenter,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.openProfileScreen("tutorial") },
+                    modifier = Modifier.testTag("menu_tutorial")
+                )
+
+                // My Performance
+                MedBankListItem(
+                    title = "My Performance",
+                    subtitle = "Clinical analytics, scores & subject breakdown",
+                    icon = Icons.Default.BarChart,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.openProfileScreen("analytics") },
+                    modifier = Modifier.testTag("menu_analytics")
+                )
+
+                // My Subscriptions
+                MedBankListItem(
+                    title = "My Subscriptions",
+                    subtitle = "Active passes, renewals & upgrade plans",
+                    icon = Icons.Default.CardMembership,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.openProfileScreen("membership") },
+                    modifier = Modifier.testTag("menu_membership")
+                )
+
+                // Refer & Earn
+                MedBankListItem(
+                    title = "Refer & Earn",
+                    subtitle = "Earn 20% royalty for referring colleagues",
+                    icon = Icons.Default.CardGiftcard,
+                    iconColor = BrandSuccess,
+                    iconBgColor = BrandSuccessPastel,
+                    trailingText = "20% Royalty",
+                    onClick = { viewModel.openProfileScreen("refer_earn") },
+                    modifier = Modifier.testTag("menu_refer_earn")
+                )
+
+                // Help Center
+                MedBankListItem(
+                    title = "Help Center",
+                    subtitle = "Admin support, verification, & queries",
+                    icon = Icons.Default.SupportAgent,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.openProfileScreen("help") },
+                    modifier = Modifier.testTag("menu_help")
+                )
+
+
+                // Privacy Policy
+                MedBankListItem(
+                    title = "Privacy Policy",
+                    subtitle = "Institution data safety and privacy rules",
+                    icon = Icons.Default.Security,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.openLegalViewer("privacy") },
+                    modifier = Modifier.testTag("menu_privacy_policy")
+                )
+
+                // Terms & Conditions
+                MedBankListItem(
+                    title = "Terms & Conditions",
+                    subtitle = "Single-device security & subscription terms",
+                    icon = Icons.Default.Description,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.openLegalViewer("terms") },
+                    modifier = Modifier.testTag("menu_terms")
+                )
+
+                // Logout (Red icon badge)
+                MedBankListItem(
+                    title = "Sign Out",
+                    subtitle = "Log out from this session",
+                    icon = Icons.AutoMirrored.Filled.Logout,
+                    iconColor = BrandRed,
+                    iconBgColor = BrandRedPastel,
+                    showArrow = false,
+                    showDivider = false,
+                    onClick = { showLogoutConfirmation = true },
+                    modifier = Modifier.testTag("menu_logout")
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = user.fullName,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+                text = "Medical Bank Candidate App • v1.0.4",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary
             )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            StatusBadge(
-                text = user.role.uppercase(),
-                color = if (user.role == "admin") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                icon = if (user.role == "admin") Icons.Default.Shield else Icons.Default.School
+            Text(
+                text = "Protected by Hardware Device Binding & FLAG_SECURE",
+                fontSize = 11.sp,
+                color = TextTertiary
             )
-
             Spacer(modifier = Modifier.height(24.dp))
-
-            // Details Card
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Candidate Information", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
-                    ProfileRow(label = "CNIC / National ID", value = user.cnic, icon = Icons.Default.Badge)
-                    ProfileRow(label = "Email", value = user.email, icon = Icons.Default.Email)
-                    ProfileRow(label = "Phone", value = user.phone, icon = Icons.Default.Phone)
-                    ProfileRow(label = "Country", value = user.country, icon = Icons.Default.Public)
-                    ProfileRow(
-                        label = "Medical Track",
-                        value = if (user.programType == "mbbs") "MBBS (Year ${user.mbbsYear ?: 1})" else "Licensing (${user.licensingPath ?: "USMLE"})",
-                        icon = Icons.Default.MedicalInformation
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Device Binding Card
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Active Device (1/1 Limit)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        StatusBadge(text = "BOUND", color = MaterialTheme.colorScheme.primary, icon = Icons.Default.Lock)
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text("Device Model: ${viewModel.deviceModel}", style = MaterialTheme.typography.bodyMedium)
-                    Text("Hardware ID: ${viewModel.deviceId.take(12)}...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Notifications Preferences Card
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Notification Preferences", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-
-                    val subscribed = user.subscribedTopics
-                    val optIn = user.notificationOptIn
-
-                    // Access Approval Alerts switch
-                    val hasApprovals = subscribed.contains("medbank_approvals") || optIn
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Access approval alerts", fontWeight = FontWeight.Medium)
-                            Text("Get notified when access requests are approved", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        }
-                        Switch(
-                            checked = hasApprovals,
-                            onCheckedChange = { checked ->
-                                if (checked) {
-                                    com.example.notifications.TopicManager.subscribeTopic(user.uid, "medbank_approvals", subscribed)
-                                } else {
-                                    com.example.notifications.TopicManager.unsubscribeTopic(user.uid, "medbank_approvals", subscribed)
-                                }
-                            }
-                        )
-                    }
-
-                    // New exam announcements switch
-                    val hasExams = subscribed.contains("medbank_new_exams") || optIn
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("New exam announcements", fontWeight = FontWeight.Medium)
-                            Text("Alerts when new exams are published in your track", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        }
-                        Switch(
-                            checked = hasExams,
-                            onCheckedChange = { checked ->
-                                if (checked) {
-                                    com.example.notifications.TopicManager.subscribeTopic(user.uid, "medbank_new_exams", subscribed)
-                                } else {
-                                    com.example.notifications.TopicManager.unsubscribeTopic(user.uid, "medbank_new_exams", subscribed)
-                                }
-                            }
-                        )
-                    }
-
-                    // General announcements switch
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("General announcements", fontWeight = FontWeight.Medium)
-                            Text("System updates and important news", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        }
-                        Switch(
-                            checked = optIn,
-                            onCheckedChange = { checked ->
-                                com.example.notifications.TopicManager.subscribeUserTopics(
-                                    uid = user.uid,
-                                    programType = user.programType,
-                                    mbbsYear = user.mbbsYear,
-                                    licensingPath = user.licensingPath,
-                                    notificationOptIn = checked
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // Sign Out Button
-            Button(
-                onClick = { viewModel.logout() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .testTag("logout_button"),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError
-                )
-            ) {
-                Icon(Icons.Default.Logout, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Sign Out", fontWeight = FontWeight.Bold)
-            }
         }
     }
-}
 
-@Composable
-fun ProfileRow(label: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(20.dp)
+    // Logout Confirmation Dialog
+    if (showLogoutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmation = false },
+            title = { Text("Sign Out?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Are you sure you want to sign out? Your device binding and exam records remain safely stored in the cloud.", color = TextSecondary)
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutConfirmation = false
+                        viewModel.logout()
+                    },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandRed)
+                ) {
+                    Text("Sign Out")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirmation = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
         )
-        Spacer(modifier = Modifier.width(12.dp))
-        Column {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-        }
     }
 }

@@ -114,6 +114,10 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
     private val _latestResult = MutableStateFlow<ExamResult?>(null)
     val latestResult: StateFlow<ExamResult?> = _latestResult.asStateFlow()
 
+    private val _userResults = MutableStateFlow<List<ExamResult>>(emptyList())
+    val userResults: StateFlow<List<ExamResult>> = _userResults.asStateFlow()
+
+
     // Review Mode State
     private val _reviewData = MutableStateFlow<ReviewData?>(null)
     val reviewData: StateFlow<ReviewData?> = _reviewData.asStateFlow()
@@ -125,12 +129,44 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
     private val _accessRequestStatusMsg = MutableStateFlow<String?>(null)
     val accessRequestStatusMsg: StateFlow<String?> = _accessRequestStatusMsg.asStateFlow()
 
+    private val _trackPlans = MutableStateFlow<List<MembershipPlan>>(emptyList())
+    val trackPlans: StateFlow<List<MembershipPlan>> = _trackPlans.asStateFlow()
+
+    private val _isSubmittingRequest = MutableStateFlow(false)
+    val isSubmittingRequest: StateFlow<Boolean> = _isSubmittingRequest.asStateFlow()
+
+    private val _isStartingExam = MutableStateFlow<String?>(null)
+    val isStartingExam: StateFlow<String?> = _isStartingExam.asStateFlow()
+
+    private val questionsCache = mutableMapOf<String, List<Question>>()
+
     private val _pendingAccessRequests = MutableStateFlow<Set<String>>(emptySet())
     val pendingAccessRequests: StateFlow<Set<String>> = _pendingAccessRequests.asStateFlow()
 
     // Admin State
     private val _adminStats = MutableStateFlow<Map<String, Int>>(emptyMap())
     val adminStats: StateFlow<Map<String, Int>> = _adminStats.asStateFlow()
+
+    // Legal Content State
+    private val _legalContent = MutableStateFlow<LegalContent?>(null)
+    val legalContent: StateFlow<LegalContent?> = _legalContent.asStateFlow()
+
+    private val _isSavingLegal = MutableStateFlow(false)
+    val isSavingLegal: StateFlow<Boolean> = _isSavingLegal.asStateFlow()
+
+    private val _legalSaveSuccess = MutableStateFlow<Boolean?>(null)
+    val legalSaveSuccess: StateFlow<Boolean?> = _legalSaveSuccess.asStateFlow()
+
+    private val _activeLegalViewer = MutableStateFlow<String?>(null) // "privacy" or "terms"
+    val activeLegalViewer: StateFlow<String?> = _activeLegalViewer.asStateFlow()
+
+    private val _activeProfileScreen = MutableStateFlow<String?>(null) // null, "account", "help", "tutorial", "notifications", "device"
+    val activeProfileScreen: StateFlow<String?> = _activeProfileScreen.asStateFlow()
+
+    fun openProfileScreen(screen: String?) {
+        _activeProfileScreen.value = screen
+    }
+
 
     init {
         // Observe user changes to update currentUser reactively
@@ -151,6 +187,14 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
                         _pendingAccessRequests.value = requests.map { it.scopeId }.toSet()
                     }
                 }
+
+                // Observe user exam results
+                launch {
+                    repository.observeResultsByUser(user.uid).collect { list ->
+                        _userResults.value = list.sortedByDescending { it.submittedAt }.take(200)
+                    }
+                }
+
             }
         }
     }
@@ -177,7 +221,8 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
         programType: String,
         mbbsYear: Int?,
         licensingPath: String?,
-        password: String
+        password: String,
+        referralCode: String? = null
     ) {
         viewModelScope.launch {
             _isAuthLoading.value = true
@@ -196,15 +241,20 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
                 licensingPath = licensingPath,
                 password = password,
                 deviceId = deviceId,
-                deviceModel = deviceModel
+                deviceModel = deviceModel,
+                enteredReferralCode = referralCode
             )
 
             _isAuthLoading.value = false
             result.fold(
-                onSuccess = { user ->
-                    _currentUser.value = user
-                    _authSuccessMessage.value = "Welcome to MedBank, ${user.fullName}!"
-                    if (user.role == "admin") {
+                onSuccess = { outcome ->
+                    _currentUser.value = outcome.user
+                    if (outcome.invalidReferralCodeEntered) {
+                        _authSuccessMessage.value = "Invalid referral code. Proceeding without referral."
+                    } else {
+                        _authSuccessMessage.value = "Welcome to MedBank, ${outcome.user.fullName}!"
+                    }
+                    if (outcome.user.role == "admin") {
                         // Scaffold standard folder tree structure on initial admin bootstrap
                         repository.scaffoldDefaultStructureIfRequested()
                     }
@@ -304,17 +354,17 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
 
     fun openAccessRequestSheet(exam: Exam) {
         viewModelScope.launch {
-            val planId = exam.accessPlanIds.firstOrNull()
-            val plan = if (planId != null) db.dao().getPlanById(planId)?.let {
-                MembershipPlan(it.id, it.name, it.price, it.currency, it.durationDays, it.scopeType)
-            } else null
-            _accessSheet.value = AccessSheetData(exam = exam, plan = plan)
+            val plans = repository.getPlansForExamTrack(exam.parentType, exam.parentId)
+            _trackPlans.value = plans
+            val defaultPlan = plans.firstOrNull()
+            _accessSheet.value = AccessSheetData(exam = exam, plan = defaultPlan)
         }
     }
 
     fun closeAccessRequestSheet() {
         _accessSheet.value = null
         _accessRequestStatusMsg.value = null
+        _isSubmittingRequest.value = false
     }
 
     fun submitAccessRequest(paymentProofSimulated: String, launchWhatsApp: Boolean, context: Context) {
@@ -322,10 +372,10 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
         val user = _currentUser.value ?: return
 
         viewModelScope.launch {
+            _isSubmittingRequest.value = true
             val plan = sheet.plan
             val planName = plan?.name ?: "Full Access Pass"
             val planId = plan?.id ?: "standard_plan"
-
             val scopeId = "${sheet.exam.parentType}_${sheet.exam.parentId}"
 
             repository.createAccessRequest(
@@ -335,7 +385,9 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
                 scopeType = sheet.exam.parentType,
                 scopeId = scopeId,
                 planId = planId,
+                planName = planName,
                 paymentProofBase64 = paymentProofSimulated,
+                paymentProofUrl = paymentProofSimulated,
                 whatsappSent = launchWhatsApp
             )
 
@@ -354,26 +406,96 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
                 } catch (_: Exception) {}
             }
 
+            _isSubmittingRequest.value = false
             _accessRequestStatusMsg.value = "Access request submitted! Admin will verify and activate."
-            // NOTE: UI layer must observe accessRequestStatusMsg and show Snackbar
             delay(1800)
             closeAccessRequestSheet()
         }
     }
 
-    // --- Exam Player ---
+    fun submitAccessRequestWithFile(
+        fileUri: android.net.Uri?,
+        selectedPlan: MembershipPlan,
+        launchWhatsApp: Boolean,
+        context: Context
+    ) {
+        val sheet = _accessSheet.value ?: return
+        val user = _currentUser.value ?: return
+
+        viewModelScope.launch {
+            _isSubmittingRequest.value = true
+            val planName = selectedPlan.name
+            val planId = selectedPlan.id
+            val scopeId = "${sheet.exam.parentType}_${sheet.exam.parentId}"
+
+            repository.uploadPaymentProofAndCreateRequest(
+                uid = user.uid,
+                studentName = user.fullName,
+                cnic = user.cnic,
+                scopeType = sheet.exam.parentType,
+                scopeId = scopeId,
+                planId = planId,
+                planName = planName,
+                fileUri = fileUri,
+                whatsappSent = launchWhatsApp
+            )
+
+            if (launchWhatsApp) {
+                val settings = repository.getSettings()
+                val adminPhone = settings.adminWhatsapp.replace("+", "").replace(" ", "").trim()
+                val message = "Hello MedBank Admin,\nI have submitted an access request.\nName: ${user.fullName}\nCNIC: ${user.cnic}\nExam: ${sheet.exam.title}\nPlan: $planName"
+                val encodedMsg = URLEncoder.encode(message, "UTF-8")
+                val waUrl = "https://wa.me/$adminPhone?text=$encodedMsg"
+
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(waUrl)).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                } catch (_: Exception) {}
+            }
+
+            _isSubmittingRequest.value = false
+            _accessRequestStatusMsg.value = "Access request submitted! Admin will verify and activate."
+            delay(1800)
+            closeAccessRequestSheet()
+        }
+    }
+
+    // --- Pre-fetch and Fast Start Exam ---
+    fun preloadExamsForSubject(subject: Subject?) {
+        if (subject == null) return
+        viewModelScope.launch {
+            val exams = repository.getExamsBySubject(subject.id)
+            exams.forEach { ex ->
+                if (!questionsCache.containsKey(ex.id)) {
+                    val qs = repository.getQuestionsForExam(ex.id)
+                    questionsCache[ex.id] = qs
+                }
+            }
+        }
+    }
+
     fun startExam(exam: Exam) {
         val user = _currentUser.value ?: return
+        _isStartingExam.value = exam.id
+
         viewModelScope.launch {
             val pastResults = repository.getPastResultsForExam(user.uid, exam.id)
             if (pastResults.size >= exam.maxAttempts) {
+                _isStartingExam.value = null
                 _playerState.value = ExamPlayerState(
                     error = "Maximum attempts reached (${pastResults.size}/${exam.maxAttempts})."
                 )
                 return@launch
             }
 
-            val questions = repository.getQuestionsForExam(exam.id)
+            val questions = questionsCache[exam.id] ?: repository.getQuestionsForExam(exam.id).also {
+                questionsCache[exam.id] = it
+            }
+
+            _isStartingExam.value = null
+
             if (questions.isEmpty()) {
                 _playerState.value = ExamPlayerState(
                     error = "This exam currently has no questions."
@@ -470,7 +592,9 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
                 examId = exam.id,
                 studentAnswers = studentAnswersList,
                 startedAt = examStartedTimestamp,
-                deviceId = deviceId
+                deviceId = deviceId,
+                cachedExam = exam,
+                cachedQuestions = cur.questions
             )
 
             result.fold(
@@ -526,9 +650,9 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun approveRequest(req: AccessRequest, adminNote: String) {
+    fun approveRequest(req: AccessRequest, adminNote: String, overridePlan: MembershipPlan? = null) {
         viewModelScope.launch {
-            repository.updateRequestStatus(req, isApproved = true, adminNote = adminNote)
+            repository.updateRequestStatus(req, isApproved = true, adminNote = adminNote, overridePlan = overridePlan)
             refreshAdminStats()
         }
     }
@@ -551,4 +675,63 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
             repository.promoteUserToAdmin(uid)
         }
     }
+
+    // --- Legal Content Operations ---
+    fun loadLegalContent() {
+        viewModelScope.launch {
+            _legalContent.value = repository.getLegalContent()
+        }
+    }
+
+    fun saveLegalContent(privacyPolicy: String, termsAndConditions: String) {
+        viewModelScope.launch {
+            _isSavingLegal.value = true
+            val success = repository.saveLegalContent(privacyPolicy, termsAndConditions)
+            if (success) {
+                _legalContent.value = LegalContent(
+                    privacyPolicy = privacyPolicy,
+                    termsAndConditions = termsAndConditions,
+                    updatedAt = System.currentTimeMillis()
+                )
+            }
+            _isSavingLegal.value = false
+            _legalSaveSuccess.value = success
+        }
+    }
+
+    fun clearLegalSaveStatus() {
+        _legalSaveSuccess.value = null
+    }
+
+    fun openLegalViewer(type: String) {
+        _activeLegalViewer.value = type
+        loadLegalContent()
+    }
+
+    fun closeLegalViewer() {
+        _activeLegalViewer.value = null
+    }
+
+    // --- Referral & Payout Operations ---
+    fun observeReferralsForCurrentUser(): Flow<List<User>> {
+        val uid = _currentUser.value?.uid ?: return flowOf(emptyList())
+        return repository.observeReferralsForUser(uid)
+    }
+
+    fun observePendingReferralTransactions(): Flow<List<ReferralTransaction>> {
+        return repository.observePendingReferralTransactions()
+    }
+
+    fun markPayoutPaid(transactionId: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.markReferralTransactionPaid(transactionId)
+                refreshAdminStats()
+                onDone(true)
+            } catch (e: Exception) {
+                onDone(false)
+            }
+        }
+    }
 }
+

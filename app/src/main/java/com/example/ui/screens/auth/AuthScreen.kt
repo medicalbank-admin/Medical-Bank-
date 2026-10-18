@@ -1,6 +1,7 @@
 package com.example.ui.screens.auth
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,17 +17,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.foundation.Image
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.MedBankViewModel
+import com.example.ui.components.MedBankCard
+import com.example.ui.components.MedBankPillButton
+import com.example.ui.components.MedBankSegmentedTabs
+import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +53,7 @@ fun AuthScreen(viewModel: MedBankViewModel) {
     var regLicensingPath by remember { mutableStateOf("USMLE") } // NRE, FCPS, USMLE, PLAB, DHA, SMLE
     var regPassword by remember { mutableStateOf("") }
     var regPasswordVisible by remember { mutableStateOf(false) }
+    var regReferralCode by remember { mutableStateOf("") }
 
     // Forgot Password Dialog
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
@@ -61,7 +66,7 @@ fun AuthScreen(viewModel: MedBankViewModel) {
     val licensingOptions = listOf("USMLE", "NRE", "FCPS", "PLAB", "DHA", "SMLE")
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = CardSurface // White background
     ) { padding ->
         Column(
             modifier = Modifier
@@ -70,83 +75,56 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(36.dp))
 
-            // App Brand Logo
+            // Centered App Brand Logo
             Image(
                 painter = painterResource(id = com.example.R.drawable.logo),
                 contentDescription = "Medical Bank Logo",
                 modifier = Modifier
-                    .width(200.dp)
+                    .width(220.dp)
                     .wrapContentHeight(),
                 contentScale = ContentScale.Fit
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = if (selectedAuthTab == 0) "Sign in to continue" else "Create your account",
+                text = if (selectedAuthTab == 0) "Sign in to access your question banks" else "Join Medical Bank candidate portal",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = TextSecondary,
                 fontSize = 14.sp
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // Tab Selector: Login vs Register (ROLE-NEUTRAL)
-            TabRow(
-                selectedTabIndex = selectedAuthTab,
+            // Segmented tabs: [ Sign In ] [ Register ]
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .clip(RoundedCornerShape(14.dp)),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                indicator = {}
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
             ) {
-                Tab(
-                    selected = selectedAuthTab == 0,
-                    onClick = {
-                        selectedAuthTab = 0
+                MedBankSegmentedTabs(
+                    tabs = listOf("Sign In", "Register"),
+                    selectedIndex = selectedAuthTab,
+                    onTabSelected = { idx ->
+                        selectedAuthTab = idx
                         viewModel.clearAuthMessages()
                     },
-                    modifier = Modifier
-                        .testTag("auth_tab_login")
-                        .padding(vertical = 12.dp),
-                    text = {
-                        Text(
-                            "Sign In",
-                            fontWeight = if (selectedAuthTab == 0) FontWeight.Bold else FontWeight.Medium,
-                            color = if (selectedAuthTab == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                )
-                Tab(
-                    selected = selectedAuthTab == 1,
-                    onClick = {
-                        selectedAuthTab = 1
-                        viewModel.clearAuthMessages()
-                    },
-                    modifier = Modifier
-                        .testTag("auth_tab_register")
-                        .padding(vertical = 12.dp),
-                    text = {
-                        Text(
-                            "Register",
-                            fontWeight = if (selectedAuthTab == 1) FontWeight.Bold else FontWeight.Medium,
-                            color = if (selectedAuthTab == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    modifier = Modifier.testTag("auth_segmented_tabs")
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Status / Error alerts
             if (!authError.isNullOrBlank()) {
-                Card(
+                Surface(
+                    color = BrandRedPastel,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .padding(bottom = 14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 6.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
@@ -155,24 +133,26 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                         Icon(
                             imageVector = Icons.Default.ErrorOutline,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
+                            tint = BrandRed
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = authError ?: "",
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodyMedium
+                            color = BrandRed,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
             }
 
             if (!authSuccessMsg.isNullOrBlank()) {
-                Card(
+                Surface(
+                    color = BrandSuccessPastel,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .padding(bottom = 14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 6.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
@@ -181,48 +161,45 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = BrandSuccess
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = authSuccessMsg ?: "",
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            style = MaterialTheme.typography.bodyMedium
+                            color = BrandSuccess,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
             }
 
-            // FORM CONTAINER
-            Card(
+            // FORM CONTAINER inside MedBankCard
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.92f)
-                    .padding(bottom = 32.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(22.dp)
+                MedBankCard(
+                    padding = 22.dp
                 ) {
                     if (selectedAuthTab == 0) {
                         // --- LOGIN FORM ---
                         Text(
-                            text = "Candidate Portal",
+                            text = "Welcome Back",
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
                         )
                         Text(
                             text = "Log in with your 13-digit CNIC and password",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                            color = TextSecondary
                         )
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // CNIC input
+                        // CNIC input (12dp corners, soft grey border)
                         OutlinedTextField(
                             value = loginCnic,
                             onValueChange = {
@@ -231,13 +208,19 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                                 }
                             },
                             label = { Text("13-Digit CNIC (No dashes)") },
-                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = BrandBlue) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("login_cnic_input"),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = InputFieldShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBlue,
+                                unfocusedBorderColor = BorderLight,
+                                focusedContainerColor = CardSurface,
+                                unfocusedContainerColor = CardSurface
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(14.dp))
@@ -247,12 +230,13 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                             value = loginPassword,
                             onValueChange = { loginPassword = it },
                             label = { Text("Password") },
-                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = BrandBlue) },
                             trailingIcon = {
                                 IconButton(onClick = { loginPasswordVisible = !loginPasswordVisible }) {
                                     Icon(
                                         imageVector = if (loginPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                        contentDescription = "Toggle password"
+                                        contentDescription = "Toggle password",
+                                        tint = TextSecondary
                                     )
                                 }
                             },
@@ -262,10 +246,16 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("login_password_input"),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = InputFieldShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBlue,
+                                unfocusedBorderColor = BorderLight,
+                                focusedContainerColor = CardSurface,
+                                unfocusedContainerColor = CardSurface
+                            )
                         )
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -275,45 +265,35 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                                 onClick = { showForgotPasswordDialog = true },
                                 modifier = Modifier.testTag("forgot_password_button")
                             ) {
-                                Text("Forgot Password?", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+                                Text("Forgot Password?", color = BrandBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        Button(
+                        // Primary Pill Button (Blue)
+                        MedBankPillButton(
+                            text = "Sign In",
                             onClick = {
                                 viewModel.login(loginCnic, loginPassword)
                             },
-                            enabled = !isAuthLoading && loginCnic.length == 13 && loginPassword.isNotBlank(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .testTag("login_submit_button"),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            if (isAuthLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
-                            } else {
-                                Text("Sign In", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            }
-                        }
+                            enabled = loginCnic.length == 13 && loginPassword.isNotBlank(),
+                            isLoading = isAuthLoading,
+                            modifier = Modifier.testTag("login_submit_button")
+                        )
 
                     } else {
                         // --- REGISTER FORM ---
                         Text(
                             text = "Create Account",
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
                         )
                         Text(
-                            text = "Register for exam access and preparation",
+                            text = "Register for exam preparation & progress tracking",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                            color = TextSecondary
                         )
 
                         Spacer(modifier = Modifier.height(18.dp))
@@ -323,12 +303,18 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                             value = regFullName,
                             onValueChange = { regFullName = it },
                             label = { Text("Full Name") },
-                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = BrandBlue) },
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_fullname_input"),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = InputFieldShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBlue,
+                                unfocusedBorderColor = BorderLight,
+                                focusedContainerColor = CardSurface,
+                                unfocusedContainerColor = CardSurface
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -342,13 +328,19 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                                 }
                             },
                             label = { Text("13-Digit CNIC (Without dashes)") },
-                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = BrandBlue) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_cnic_input"),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = InputFieldShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBlue,
+                                unfocusedBorderColor = BorderLight,
+                                focusedContainerColor = CardSurface,
+                                unfocusedContainerColor = CardSurface
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -358,13 +350,19 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                             value = regEmail,
                             onValueChange = { regEmail = it },
                             label = { Text("Email Address") },
-                            leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = BrandBlue) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_email_input"),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = InputFieldShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBlue,
+                                unfocusedBorderColor = BorderLight,
+                                focusedContainerColor = CardSurface,
+                                unfocusedContainerColor = CardSurface
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -373,14 +371,20 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                         OutlinedTextField(
                             value = regPhone,
                             onValueChange = { regPhone = it },
-                            label = { Text("Phone Number") },
-                            leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
+                            label = { Text("Phone / WhatsApp (Optional)") },
+                            leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = BrandBlue) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_phone_input"),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = InputFieldShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBlue,
+                                unfocusedBorderColor = BorderLight,
+                                focusedContainerColor = CardSurface,
+                                unfocusedContainerColor = CardSurface
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -389,56 +393,59 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                         OutlinedTextField(
                             value = regCountry,
                             onValueChange = { regCountry = it },
-                            label = { Text("Country") },
-                            leadingIcon = { Icon(Icons.Default.Public, contentDescription = null) },
+                            label = { Text("Country of Residence") },
+                            leadingIcon = { Icon(Icons.Default.Public, contentDescription = null, tint = BrandBlue) },
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_country_input"),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = InputFieldShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBlue,
+                                unfocusedBorderColor = BorderLight,
+                                focusedContainerColor = CardSurface,
+                                unfocusedContainerColor = CardSurface
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Program Type Segment (MBBS vs Licensing)
                         Text(
-                            text = "Academic / Licensing Track",
+                            text = "Track / Academic Focus",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .padding(4.dp)
-                        ) {
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth()) {
                             FilterChip(
                                 selected = regProgramType == "mbbs",
                                 onClick = { regProgramType = "mbbs" },
                                 label = { Text("MBBS (Years 1–6)") },
                                 leadingIcon = { Icon(Icons.Default.School, contentDescription = null) },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                shape = CircleShape
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             FilterChip(
                                 selected = regProgramType == "licensing",
                                 onClick = { regProgramType = "licensing" },
                                 label = { Text("Licensing Pathways") },
                                 leadingIcon = { Icon(Icons.Default.VerifiedUser, contentDescription = null) },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                shape = CircleShape
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         if (regProgramType == "mbbs") {
                             Text(
                                 text = "Current MBBS Year",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                color = TextSecondary
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Row(
@@ -448,18 +455,18 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                                 (1..6).forEach { yr ->
                                     val isSel = regMbbsYear == yr
                                     Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = CircleShape,
+                                        color = if (isSel) BrandBlue else BrandBluePastel.copy(alpha = 0.5f),
                                         modifier = Modifier
                                             .size(42.dp)
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .clip(CircleShape)
                                             .testTag("reg_year_$yr")
                                     ) {
                                         IconButton(onClick = { regMbbsYear = yr }) {
                                             Text(
                                                 "Y$yr",
                                                 fontWeight = FontWeight.Bold,
-                                                color = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = if (isSel) Color.White else BrandBlue
                                             )
                                         }
                                     }
@@ -469,7 +476,7 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                             Text(
                                 text = "Target Licensing Examination",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                color = TextSecondary
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Row(
@@ -481,7 +488,8 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                                         selected = regLicensingPath == path,
                                         onClick = { regLicensingPath = path },
                                         label = { Text(path, fontSize = 12.sp) },
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.weight(1f),
+                                        shape = CircleShape
                                     )
                                 }
                             }
@@ -495,7 +503,8 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                                         selected = regLicensingPath == path,
                                         onClick = { regLicensingPath = path },
                                         label = { Text(path, fontSize = 12.sp) },
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.weight(1f),
+                                        shape = CircleShape
                                     )
                                 }
                             }
@@ -508,12 +517,13 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                             value = regPassword,
                             onValueChange = { regPassword = it },
                             label = { Text("Password (min 8 characters)") },
-                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = BrandBlue) },
                             trailingIcon = {
                                 IconButton(onClick = { regPasswordVisible = !regPasswordVisible }) {
                                     Icon(
                                         imageVector = if (regPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                        contentDescription = "Toggle password"
+                                        contentDescription = "Toggle password",
+                                        tint = TextSecondary
                                     )
                                 }
                             },
@@ -523,12 +533,42 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("reg_password_input"),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = InputFieldShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBlue,
+                                unfocusedBorderColor = BorderLight,
+                                focusedContainerColor = CardSurface,
+                                unfocusedContainerColor = CardSurface
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Referral Code (Optional)
+                        OutlinedTextField(
+                            value = regReferralCode,
+                            onValueChange = { regReferralCode = it.uppercase() },
+                            label = { Text("Referral Code (Optional)") },
+                            placeholder = { Text("e.g. MB1234") },
+                            leadingIcon = { Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = BrandBlue) },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("reg_referral_code_input"),
+                            shape = InputFieldShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBlue,
+                                unfocusedBorderColor = BorderLight,
+                                focusedContainerColor = CardSurface,
+                                unfocusedContainerColor = CardSurface
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        Button(
+                        // Primary Pill Button
+                        MedBankPillButton(
+                            text = "Complete Registration",
                             onClick = {
                                 viewModel.register(
                                     fullName = regFullName,
@@ -539,29 +579,19 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                                     programType = regProgramType,
                                     mbbsYear = if (regProgramType == "mbbs") regMbbsYear else null,
                                     licensingPath = if (regProgramType == "licensing") regLicensingPath else null,
-                                    password = regPassword
+                                    password = regPassword,
+                                    referralCode = regReferralCode.ifBlank { null }
                                 )
                             },
-                            enabled = !isAuthLoading && regFullName.isNotBlank() && regCnic.length == 13 && regEmail.isNotBlank() && regPassword.length >= 8,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .testTag("reg_submit_button"),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            if (isAuthLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
-                            } else {
-                                Text("Complete Registration", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            }
-                        }
+                            enabled = regFullName.isNotBlank() && regCnic.length == 13 && regEmail.isNotBlank() && regPassword.length >= 8,
+                            isLoading = isAuthLoading,
+                            modifier = Modifier.testTag("reg_submit_button")
+                        )
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 
@@ -569,23 +599,29 @@ fun AuthScreen(viewModel: MedBankViewModel) {
     if (showForgotPasswordDialog) {
         AlertDialog(
             onDismissRequest = { showForgotPasswordDialog = false },
-            title = { Text("Password Recovery") },
+            title = { Text("Account Recovery", fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     Text(
-                        "Enter your 13-digit registered CNIC to receive password reset instructions:",
-                        style = MaterialTheme.typography.bodyMedium
+                        "Enter your registered CNIC. An administrator or automated recovery email will be triggered.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                     OutlinedTextField(
                         value = forgotCnic,
-                        onValueChange = { if (it.length <= 13 && it.all { ch -> ch.isDigit() }) forgotCnic = it },
+                        onValueChange = {
+                            if (it.length <= 13 && it.all { ch -> ch.isDigit() }) {
+                                forgotCnic = it
+                            }
+                        },
                         label = { Text("13-Digit CNIC") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("forgot_cnic_input")
+                            .testTag("forgot_cnic_input"),
+                        shape = InputFieldShape
                     )
                 }
             },
@@ -596,17 +632,15 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                         showForgotPasswordDialog = false
                     },
                     enabled = forgotCnic.length == 13,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandBlue)
                 ) {
-                    Text("Resolve & Send")
+                    Text("Request Reset")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showForgotPasswordDialog = false }) {
-                    Text("Cancel")
+                    Text("Cancel", color = TextSecondary)
                 }
             }
         )

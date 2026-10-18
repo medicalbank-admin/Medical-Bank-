@@ -20,7 +20,11 @@ data class User(
     val subscribedTopics: List<String> = emptyList(),
     val notificationOptIn: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
-    val lastLoginAt: Long = System.currentTimeMillis()
+    val lastLoginAt: Long = System.currentTimeMillis(),
+    val referralCode: String = "",
+    val referredBy: String? = null,
+    val walletBalance: Double = 0.0,
+    val totalEarned: Double = 0.0
 )
 
 data class Entitlement(
@@ -127,6 +131,9 @@ data class MembershipPlan(
     val currency: String = "USD",
     val durationDays: Int = 30,
     val scopeType: String = "all", // "all", "mbbs", "licensing", "pathway", "year", "exam"
+    val scopeProgramType: String = "",
+    val scopeMbbsYear: String = "",
+    val scopeLicensingPathway: String = "",
     val scopeIds: List<String> = emptyList(),
     val features: List<String> = emptyList(),
     val isActive: Boolean = true,
@@ -183,3 +190,30 @@ data class BulkImportResult(
     val answers: List<PrivateAnswer>,
     val errors: List<String>
 )
+
+data class LegalContent(
+    val privacyPolicy: String = "",
+    val termsAndConditions: String = "",
+    val updatedAt: Long = 0L
+)
+
+data class ReferralTransaction(
+    val id: String = "",
+    val referrerUid: String = "",
+    val referrerName: String = "",
+    val referredUid: String = "",
+    val referredName: String = "",
+    val planName: String = "",
+    val amountPaid: Double = 0.0,
+    val commissionAmount: Double = 0.0,
+    val status: String = "pending", // "pending", "paid"
+    val createdAt: Long = System.currentTimeMillis(),
+    val paidAt: Long? = null
+)
+
+data class RegistrationResult(
+    val user: User,
+    val invalidReferralCodeEntered: Boolean = false
+)
+
+

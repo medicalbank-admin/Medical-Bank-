@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.R
 import com.example.data.local.*
 import com.example.data.models.*
+import com.example.notifications.NotificationHelper
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -145,8 +146,18 @@ class MedBankRepository(
             licensingPath = e.licensingPath,
             entitlements = jsonToEntitlements(e.entitlementsJson),
             createdAt = e.createdAt,
-            lastLoginAt = e.lastLoginAt
+            lastLoginAt = e.lastLoginAt,
+            referralCode = e.referralCode,
+            referredBy = e.referredBy,
+            walletBalance = e.walletBalance,
+            totalEarned = e.totalEarned
         )
+    }
+
+    fun generateReferralCode(): String {
+        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        val suffix = (1..4).map { chars.random() }.joinToString("")
+        return "MB$suffix"
     }
 
     // --- STEP 2 & 3: Settings & Admin Bootstrap ---
@@ -223,6 +234,39 @@ class MedBankRepository(
         )
     }
 
+    suspend fun getLegalContent(): LegalContent {
+        return try {
+            val snap = firestore.collection("settings").document("legal").get().await()
+            if (snap.exists()) {
+                LegalContent(
+                    privacyPolicy = snap.getString("privacyPolicy") ?: "",
+                    termsAndConditions = snap.getString("termsAndConditions") ?: "",
+                    updatedAt = snap.getTimestamp("updatedAt")?.toDate()?.time ?: 0L
+                )
+            } else {
+                LegalContent()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get legal content: ${e.message}")
+            LegalContent()
+        }
+    }
+
+    suspend fun saveLegalContent(privacyPolicy: String, termsAndConditions: String): Boolean {
+        return try {
+            val data = mapOf(
+                "privacyPolicy" to privacyPolicy,
+                "termsAndConditions" to termsAndConditions,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            firestore.collection("settings").document("legal").set(data, SetOptions.merge()).await()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save legal content: ${e.message}")
+            false
+        }
+    }
+
     // --- STEP 2: Authentication ---
     suspend fun registerUser(
         fullName: String,
@@ -236,8 +280,9 @@ class MedBankRepository(
         licensingPath: String?,
         password: String,
         deviceId: String,
-        deviceModel: String
-    ): Result<User> {
+        deviceModel: String,
+        enteredReferralCode: String? = null
+    ): Result<RegistrationResult> {
         val cleanCnic = cnic.trim()
         if (cleanCnic.length != 13 || !cleanCnic.all { it.isDigit() }) {
             return Result.failure(IllegalArgumentException("CNIC must be exactly 13 numeric digits."))
@@ -285,6 +330,30 @@ class MedBankRepository(
                 }
             }.await()
 
+            // Check entered referral code
+            var referredByUid: String? = null
+            var invalidReferralCodeEntered = false
+            val cleanReferral = enteredReferralCode?.trim()?.uppercase()
+            if (!cleanReferral.isNullOrBlank()) {
+                try {
+                    val refQuery = firestore.collection("users")
+                        .whereEqualTo("referralCode", cleanReferral)
+                        .limit(1)
+                        .get()
+                        .await()
+                    if (!refQuery.isEmpty) {
+                        referredByUid = refQuery.documents[0].id
+                    } else {
+                        invalidReferralCodeEntered = true
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Referral code lookup failed: ${e.message}")
+                    invalidReferralCodeEntered = true
+                }
+            }
+
+            val newReferralCode = generateReferralCode()
+
             // TODO: Requires Cloud Storage — use Base64 in Firestore for now.
             val userPayload = hashMapOf<String, Any?>(
                 "role" to assignedRole,
@@ -298,6 +367,10 @@ class MedBankRepository(
                 "mbbsYear" to mbbsYear,
                 "licensingPath" to licensingPath,
                 "entitlements" to emptyMap<String, Any>(),
+                "referralCode" to newReferralCode,
+                "referredBy" to referredByUid,
+                "walletBalance" to 0.0,
+                "totalEarned" to 0.0,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "lastLoginAt" to FieldValue.serverTimestamp()
             )
@@ -338,12 +411,16 @@ class MedBankRepository(
                 licensingPath = licensingPath,
                 entitlementsJson = "{}",
                 createdAt = System.currentTimeMillis(),
-                lastLoginAt = System.currentTimeMillis()
+                lastLoginAt = System.currentTimeMillis(),
+                referralCode = newReferralCode,
+                referredBy = referredByUid,
+                walletBalance = 0.0,
+                totalEarned = 0.0
             )
             dao.insertUser(userEntity)
             dao.insertCnicIndex(CnicIndexEntity(cleanCnic, uid, email.trim().lowercase()))
 
-            return Result.success(userEntityToModel(userEntity))
+            return Result.success(RegistrationResult(userEntityToModel(userEntity), invalidReferralCodeEntered))
         } catch (e: Exception) {
             Log.e(TAG, "Registration error: ${e.message}", e)
             return Result.failure(e)
@@ -419,6 +496,15 @@ class MedBankRepository(
             // Update last login
             firestore.collection("users").document(uid).update("lastLoginAt", FieldValue.serverTimestamp())
 
+            var referralCode = userDoc.getString("referralCode") ?: ""
+            if (referralCode.isBlank()) {
+                referralCode = generateReferralCode()
+                firestore.collection("users").document(uid).update("referralCode", referralCode)
+            }
+            val referredBy = userDoc.getString("referredBy")
+            val walletBalance = userDoc.getDouble("walletBalance") ?: (userDoc.getLong("walletBalance")?.toDouble() ?: 0.0)
+            val totalEarned = userDoc.getDouble("totalEarned") ?: (userDoc.getLong("totalEarned")?.toDouble() ?: 0.0)
+
             // Map entitlements
             val parsedEntitlements = mutableMapOf<String, Entitlement>()
             entitlementsRaw.forEach { (scopeId, value) ->
@@ -448,7 +534,11 @@ class MedBankRepository(
                 licensingPath = licensingPath,
                 entitlementsJson = entitlementsToJson(parsedEntitlements),
                 createdAt = userDoc.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
-                lastLoginAt = System.currentTimeMillis()
+                lastLoginAt = System.currentTimeMillis(),
+                referralCode = referralCode,
+                referredBy = referredBy,
+                walletBalance = walletBalance,
+                totalEarned = totalEarned
             )
             dao.insertUser(userEntity)
 
@@ -521,7 +611,11 @@ class MedBankRepository(
                     subscribedTopics = (snapshot.get("subscribedTopics") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList(),
                     notificationOptIn = snapshot.getBoolean("notificationOptIn") ?: true,
                     createdAt = snapshot.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
-                    lastLoginAt = snapshot.getTimestamp("lastLoginAt")?.toDate()?.time ?: System.currentTimeMillis()
+                    lastLoginAt = snapshot.getTimestamp("lastLoginAt")?.toDate()?.time ?: System.currentTimeMillis(),
+                    referralCode = snapshot.getString("referralCode") ?: "",
+                    referredBy = snapshot.getString("referredBy"),
+                    walletBalance = snapshot.getDouble("walletBalance") ?: (snapshot.getLong("walletBalance")?.toDouble() ?: 0.0),
+                    totalEarned = snapshot.getDouble("totalEarned") ?: (snapshot.getLong("totalEarned")?.toDouble() ?: 0.0)
                 )
                 trySend(u)
             } else {
@@ -546,13 +640,43 @@ class MedBankRepository(
                     country = d.getString("country") ?: "",
                     programType = d.getString("programType") ?: "mbbs",
                     mbbsYear = d.getLong("mbbsYear")?.toInt(),
-                    licensingPath = d.getString("licensingPath")
+                    licensingPath = d.getString("licensingPath"),
+                    referralCode = d.getString("referralCode") ?: "",
+                    referredBy = d.getString("referredBy"),
+                    walletBalance = d.getDouble("walletBalance") ?: (d.getLong("walletBalance")?.toDouble() ?: 0.0),
+                    totalEarned = d.getDouble("totalEarned") ?: (d.getLong("totalEarned")?.toDouble() ?: 0.0),
+                    createdAt = d.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis()
                 )
             } ?: emptyList()
             trySend(list)
         }
         awaitClose { registration.remove() }
     }
+
+    fun observeReferralsForUser(uid: String): Flow<List<User>> = callbackFlow {
+        val colRef = firestore.collection("users").whereEqualTo("referredBy", uid)
+        val registration = colRef.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.w(TAG, "Referrals listener error: ${error.message}")
+                return@addSnapshotListener
+            }
+            val list = snapshot?.documents?.map { d ->
+                User(
+                    uid = d.id,
+                    role = d.getString("role") ?: "student",
+                    fullName = d.getString("fullName") ?: "Candidate",
+                    email = d.getString("email") ?: "",
+                    phone = d.getString("phone") ?: "",
+                    cnic = d.getString("cnic") ?: "",
+                    createdAt = d.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
+                    walletBalance = d.getDouble("walletBalance") ?: (d.getLong("walletBalance")?.toDouble() ?: 0.0)
+                )
+            }?.sortedByDescending { it.createdAt } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { registration.remove() }
+    }
+
 
     suspend fun resetUserDevice(uid: String) {
         try {
@@ -904,9 +1028,11 @@ class MedBankRepository(
         examId: String,
         studentAnswers: List<StudentAnswer>,
         startedAt: Long,
-        deviceId: String
+        deviceId: String,
+        cachedExam: Exam? = null,
+        cachedQuestions: List<Question>? = null
     ): Result<ExamResult> {
-        val exam = getExamById(examId)
+        val exam = cachedExam ?: getExamById(examId)
             ?: return Result.failure(IllegalStateException("Exam not found."))
 
         val pastResults = getPastResultsForExam(uid, examId)
@@ -916,7 +1042,7 @@ class MedBankRepository(
         }
 
         val privateAnswers = getAnswersForExam(examId).associateBy { it.qid }
-        val questions = getQuestionsForExam(examId)
+        val questions = cachedQuestions ?: getQuestionsForExam(examId)
         val qCount = questions.size.coerceAtLeast(1)
         val marksPerQuestion = exam.totalMarks / qCount
 
@@ -1114,6 +1240,8 @@ class MedBankRepository(
                     scopeType = d.getString("scopeType") ?: "",
                     scopeId = d.getString("scopeId") ?: "",
                     planId = d.getString("planId") ?: "",
+                    planName = d.getString("planName") ?: "",
+                    paymentProofUrl = d.getString("paymentProofUrl") ?: "",
                     paymentProofBase64 = d.getString("paymentProofBase64") ?: "",
                     status = d.getString("status") ?: "pending",
                     adminNote = d.getString("adminNote") ?: "",
@@ -1139,6 +1267,8 @@ class MedBankRepository(
                     scopeType = d.getString("scopeType") ?: "",
                     scopeId = d.getString("scopeId") ?: "",
                     planId = d.getString("planId") ?: "",
+                    planName = d.getString("planName") ?: "",
+                    paymentProofUrl = d.getString("paymentProofUrl") ?: "",
                     status = d.getString("status") ?: "pending"
                 )
             } ?: emptyList()
@@ -1146,7 +1276,6 @@ class MedBankRepository(
         }
         awaitClose { reg.remove() }
     }
-
 
     suspend fun createAccessRequest(
         uid: String,
@@ -1156,7 +1285,9 @@ class MedBankRepository(
         scopeId: String,
         planId: String,
         paymentProofBase64: String,
-        whatsappSent: Boolean
+        whatsappSent: Boolean,
+        planName: String = "",
+        paymentProofUrl: String = ""
     ): AccessRequest {
         val reqId = UUID.randomUUID().toString()
         val data = hashMapOf(
@@ -1166,7 +1297,8 @@ class MedBankRepository(
             "scopeType" to scopeType,
             "scopeId" to scopeId,
             "planId" to planId,
-            // TODO: Requires Cloud Storage — use Base64 in Firestore for now.
+            "planName" to planName,
+            "paymentProofUrl" to paymentProofUrl,
             "paymentProofBase64" to paymentProofBase64,
             "whatsappSent" to whatsappSent,
             "status" to "pending",
@@ -1190,8 +1322,8 @@ class MedBankRepository(
                 scopeType = scopeType,
                 scopeId = scopeId,
                 planId = planId,
-                planName = "Exam Access Pass",
-                paymentProofUrl = "payment_receipt.jpg",
+                planName = planName.ifBlank { "Exam Access Pass" },
+                paymentProofUrl = paymentProofUrl.ifBlank { "payment_receipt.jpg" },
                 whatsappSent = whatsappSent,
                 status = "pending",
                 adminNote = "",
@@ -1208,41 +1340,196 @@ class MedBankRepository(
             scopeType = scopeType,
             scopeId = scopeId,
             planId = planId,
+            planName = planName,
+            paymentProofUrl = paymentProofUrl,
             paymentProofBase64 = paymentProofBase64,
             whatsappSent = whatsappSent,
             status = "pending"
         )
     }
 
-    // TODO: Requires Cloud Function — not available in AI Studio Build mode.
-    // onAccessRequestApprove: write entitlement + send FCM to student. Handled via Firestore write.
-    // TODO: Requires FCM — push notifications not available in AI Studio.
-    suspend fun updateRequestStatus(req: AccessRequest, isApproved: Boolean, adminNote: String) {
-        val newStatus = if (isApproved) "approved" else "rejected"
-        val approvedAtTimestamp = if (isApproved) FieldValue.serverTimestamp() else null
+    suspend fun uploadPaymentProofAndCreateRequest(
+        uid: String,
+        studentName: String,
+        cnic: String,
+        scopeType: String,
+        scopeId: String,
+        planId: String,
+        planName: String,
+        fileUri: android.net.Uri?,
+        whatsappSent: Boolean
+    ): AccessRequest {
+        val reqId = UUID.randomUUID().toString()
+        var paymentProofDownloadUrl = ""
+
+        if (fileUri != null) {
+            try {
+                val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance()
+                    .reference.child("paymentProofs/$uid/$reqId")
+                storageRef.putFile(fileUri).await()
+                paymentProofDownloadUrl = storageRef.downloadUrl.await().toString()
+                Log.d("MEDBANK_UPLOAD", "Uploaded payment proof to $paymentProofDownloadUrl")
+            } catch (e: Exception) {
+                Log.e("MEDBANK_UPLOAD", "Failed uploading proof to storage: ${e.message}")
+                paymentProofDownloadUrl = fileUri.toString()
+            }
+        }
+
+        val data = hashMapOf(
+            "uid" to uid,
+            "studentName" to studentName,
+            "cnic" to cnic,
+            "scopeType" to scopeType,
+            "scopeId" to scopeId,
+            "planId" to planId,
+            "planName" to planName,
+            "paymentProofUrl" to paymentProofDownloadUrl,
+            "whatsappSent" to whatsappSent,
+            "status" to "pending",
+            "adminNote" to "",
+            "createdAt" to FieldValue.serverTimestamp(),
+            "approvedAt" to null
+        )
 
         try {
-            firestore.collection("accessRequests").document(req.id).update(
-                mapOf(
-                    "status" to newStatus,
-                    "adminNote" to adminNote,
-                    "approvedAt" to approvedAtTimestamp
-                )
-            ).await()
+            firestore.collection("accessRequests").document(reqId).set(data).await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed creating access request: ${e.message}")
+        }
+
+        dao.insertAccessRequest(
+            AccessRequestEntity(
+                id = reqId,
+                uid = uid,
+                studentName = studentName,
+                cnic = cnic,
+                scopeType = scopeType,
+                scopeId = scopeId,
+                planId = planId,
+                planName = planName,
+                paymentProofUrl = paymentProofDownloadUrl,
+                whatsappSent = whatsappSent,
+                status = "pending",
+                adminNote = "",
+                createdAt = System.currentTimeMillis(),
+                approvedAt = null
+            )
+        )
+
+        return AccessRequest(
+            id = reqId,
+            uid = uid,
+            studentName = studentName,
+            cnic = cnic,
+            scopeType = scopeType,
+            scopeId = scopeId,
+            planId = planId,
+            planName = planName,
+            paymentProofUrl = paymentProofDownloadUrl,
+            whatsappSent = whatsappSent,
+            status = "pending"
+        )
+    }
+
+    suspend fun updateRequestStatus(
+        req: AccessRequest,
+        isApproved: Boolean,
+        adminNote: String,
+        overridePlan: MembershipPlan? = null
+    ) {
+        val newStatus = if (isApproved) "approved" else "rejected"
+        val approvedAtTimestamp = if (isApproved) FieldValue.serverTimestamp() else null
+        val grantedPlanId = overridePlan?.id ?: req.planId
+        val grantedPlanName = overridePlan?.name ?: req.planName.ifBlank { "Active Pass" }
+        val durationDays = overridePlan?.durationDays ?: 30
+
+        try {
+            val updateData = mutableMapOf<String, Any?>(
+                "status" to newStatus,
+                "adminNote" to adminNote,
+                "approvedAt" to approvedAtTimestamp
+            )
+            if (overridePlan != null) {
+                updateData["planId"] = grantedPlanId
+                updateData["planName"] = grantedPlanName
+            }
+            firestore.collection("accessRequests").document(req.id).update(updateData).await()
 
             if (isApproved) {
-                val durationDays = 30
                 val expiresAt = System.currentTimeMillis() + (durationDays.toLong() * 24 * 60 * 60 * 1000)
                 val entData = mapOf(
-                    "planId" to req.planId,
-                    "planName" to "Active Pass",
+                    "planId" to grantedPlanId,
+                    "planName" to grantedPlanName,
                     "expiresAt" to expiresAt,
                     "status" to "active"
                 )
                 firestore.collection("users").document(req.uid).update(
                     "entitlements.${req.scopeId}", entData
                 ).await()
+
+                // Check if student was referred by another user
+                try {
+                    val studentDoc = firestore.collection("users").document(req.uid).get().await()
+                    val referrerUid = studentDoc.getString("referredBy")
+                    if (!referrerUid.isNullOrBlank()) {
+                        // Determine plan price
+                        var planPrice = overridePlan?.price ?: 0.0
+                        if (planPrice <= 0.0) {
+                            val planSnap = firestore.collection("membershipPlans").document(grantedPlanId).get().await()
+                            if (planSnap.exists()) {
+                                planPrice = planSnap.getDouble("price") ?: (planSnap.getLong("price")?.toDouble() ?: 0.0)
+                            }
+                        }
+                        if (planPrice <= 0.0) {
+                            planPrice = 2500.0 // Default PKR price if plan has no price set
+                        }
+
+                        val commissionAmount = (planPrice * 0.20)
+                        val txId = UUID.randomUUID().toString()
+
+                        // Fetch referrer name for quick display
+                        val referrerSnap = firestore.collection("users").document(referrerUid).get().await()
+                        val referrerName = referrerSnap.getString("fullName") ?: "Referrer"
+
+                        val txData = hashMapOf<String, Any?>(
+                            "referrerUid" to referrerUid,
+                            "referrerName" to referrerName,
+                            "referredUid" to req.uid,
+                            "referredName" to (studentDoc.getString("fullName") ?: req.studentName),
+                            "planName" to grantedPlanName,
+                            "amountPaid" to planPrice,
+                            "commissionAmount" to commissionAmount,
+                            "status" to "pending",
+                            "createdAt" to FieldValue.serverTimestamp(),
+                            "paidAt" to null
+                        )
+                        firestore.collection("referralTransactions").document(txId).set(txData).await()
+
+                        // Update referrer walletBalance and totalEarned
+                        firestore.collection("users").document(referrerUid).update(
+                            "walletBalance", FieldValue.increment(commissionAmount),
+                            "totalEarned", FieldValue.increment(commissionAmount)
+                        ).await()
+
+                        // Send notification to referrer
+                        try {
+                            val commStr = if (commissionAmount % 1.0 == 0.0) commissionAmount.toInt().toString() else String.format("%.2f", commissionAmount)
+                            NotificationHelper.showNotification(
+                                context = context,
+                                title = "Referral Bonus!",
+                                body = "You earned PKR $commStr from a referral!",
+                                channelId = NotificationHelper.CHANNEL_APPROVALS
+                            )
+                        } catch (ne: Exception) {
+                            Log.w(TAG, "Notification trigger: ${ne.message}")
+                        }
+                    }
+                } catch (refErr: Exception) {
+                    Log.e(TAG, "Referral commission calculation error: ${refErr.message}", refErr)
+                }
             }
+
+            Log.d("MEDBANK_APPROVE", "Admin uid is still: " + FirebaseAuth.getInstance().currentUser?.uid)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to update access request in Firestore: ${e.message}")
         }
@@ -1255,9 +1542,9 @@ class MedBankRepository(
                 cnic = req.cnic,
                 scopeType = req.scopeType,
                 scopeId = req.scopeId,
-                planId = req.planId,
-                planName = "Active Pass",
-                paymentProofUrl = "",
+                planId = grantedPlanId,
+                planName = grantedPlanName,
+                paymentProofUrl = req.paymentProofUrl,
                 whatsappSent = req.whatsappSent,
                 status = newStatus,
                 adminNote = adminNote,
@@ -1266,6 +1553,58 @@ class MedBankRepository(
             )
         )
     }
+
+    // --- Referral Transactions Management ---
+    fun observePendingReferralTransactions(): Flow<List<ReferralTransaction>> = callbackFlow {
+        val ref = firestore.collection("referralTransactions")
+            .whereEqualTo("status", "pending")
+        val reg = ref.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.w(TAG, "Pending transactions listener error: ${error.message}")
+                return@addSnapshotListener
+            }
+            val list = snapshot?.documents?.mapNotNull { d ->
+                ReferralTransaction(
+                    id = d.id,
+                    referrerUid = d.getString("referrerUid") ?: "",
+                    referrerName = d.getString("referrerName") ?: "",
+                    referredUid = d.getString("referredUid") ?: "",
+                    referredName = d.getString("referredName") ?: "Student",
+                    planName = d.getString("planName") ?: "Standard Pass",
+                    amountPaid = d.getDouble("amountPaid") ?: (d.getLong("amountPaid")?.toDouble() ?: 0.0),
+                    commissionAmount = d.getDouble("commissionAmount") ?: (d.getLong("commissionAmount")?.toDouble() ?: 0.0),
+                    status = d.getString("status") ?: "pending",
+                    createdAt = d.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
+                    paidAt = d.getTimestamp("paidAt")?.toDate()?.time
+                )
+            }?.sortedByDescending { it.createdAt } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun markReferralTransactionPaid(transactionId: String) {
+        try {
+            val update = mapOf(
+                "status" to "paid",
+                "paidAt" to FieldValue.serverTimestamp()
+            )
+            firestore.collection("referralTransactions").document(transactionId).update(update).await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to mark transaction paid: ${e.message}")
+            throw e
+        }
+    }
+
+    suspend fun getUserNameByUid(uid: String): String {
+        return try {
+            val doc = firestore.collection("users").document(uid).get().await()
+            doc.getString("fullName") ?: "Referrer"
+        } catch (_: Exception) {
+            "Referrer"
+        }
+    }
+
 
     // --- Membership Plans ---
     fun observeActivePlans(): Flow<List<MembershipPlan>> = callbackFlow {
@@ -1286,15 +1625,78 @@ class MedBankRepository(
         awaitClose { reg.remove() }
     }
 
+    suspend fun getPlansForExamTrack(parentType: String, parentId: String): List<MembershipPlan> {
+        return try {
+            val snap = firestore.collection("membershipPlans")
+                .whereEqualTo("isActive", true)
+                .get()
+                .await()
+            val allPlans = snap.documents.mapNotNull { firestoreDocToPlan(it) }
+            val matching = allPlans.filter { plan ->
+                val matchesProgram = plan.scopeProgramType.isBlank() || plan.scopeProgramType.equals(parentType, ignoreCase = true)
+                val matchesYear = plan.scopeMbbsYear.isBlank() || plan.scopeMbbsYear.equals(parentId, ignoreCase = true) || parentId.contains(plan.scopeMbbsYear, ignoreCase = true)
+                val matchesPathway = plan.scopeLicensingPathway.isBlank() || plan.scopeLicensingPathway.equals(parentId, ignoreCase = true) || parentId.contains(plan.scopeLicensingPathway, ignoreCase = true)
+                val matchesScopeType = plan.scopeType.equals("all", ignoreCase = true) || 
+                                       plan.scopeType.equals(parentType, ignoreCase = true) || 
+                                       plan.scopeIds.contains(parentId)
+                (matchesProgram && matchesYear && matchesPathway) || matchesScopeType
+            }
+            if (matching.isNotEmpty()) {
+                matching
+            } else if (allPlans.isNotEmpty()) {
+                allPlans
+            } else {
+                listOf(
+                    MembershipPlan(
+                        id = "plan_${parentType}_30d",
+                        name = "${parentType.uppercase()} 30-Day Pass",
+                        price = 29.99,
+                        currency = "USD",
+                        durationDays = 30,
+                        scopeType = parentType,
+                        scopeProgramType = parentType,
+                        features = listOf("Full high-yield question explanations", "Timed mock mode with negative marking", "Unlimited access")
+                    ),
+                    MembershipPlan(
+                        id = "plan_${parentType}_90d",
+                        name = "${parentType.uppercase()} 90-Day Full Access",
+                        price = 59.99,
+                        currency = "USD",
+                        durationDays = 90,
+                        scopeType = parentType,
+                        scopeProgramType = parentType,
+                        features = listOf("Full high-yield question explanations", "Timed mock mode with negative marking", "Unlimited retakes", "Priority support")
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching plans: ${e.message}")
+            listOf(
+                MembershipPlan(
+                    id = "plan_standard_30d",
+                    name = "Standard 30-Day Clinical Pass",
+                    price = 29.99,
+                    currency = "USD",
+                    durationDays = 30,
+                    scopeType = "all",
+                    features = listOf("Full explanations", "Timed mock mode", "Negative marking")
+                )
+            )
+        }
+    }
+
     private fun firestoreDocToPlan(d: com.google.firebase.firestore.DocumentSnapshot): MembershipPlan? {
         if (!d.exists()) return null
         return MembershipPlan(
             id = d.id,
             name = d.getString("name") ?: "",
-            price = d.getDouble("price") ?: 0.0,
+            price = d.getDouble("price") ?: (d.getLong("price")?.toDouble() ?: 0.0),
             currency = d.getString("currency") ?: "USD",
             durationDays = d.getLong("durationDays")?.toInt() ?: 30,
-            scopeType = d.getString("scopeType") ?: "all",
+            scopeType = d.getString("scopeType") ?: d.getString("scopeProgramType") ?: "all",
+            scopeProgramType = d.getString("scopeProgramType") ?: "",
+            scopeMbbsYear = d.getString("scopeMbbsYear") ?: "",
+            scopeLicensingPathway = d.getString("scopeLicensingPathway") ?: "",
             scopeIds = (d.get("scopeIds") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList(),
             features = (d.get("features") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList(),
             isActive = d.getBoolean("isActive") ?: true,
@@ -1574,11 +1976,16 @@ class MedBankRepository(
             firestore.collection("membershipPlans").whereEqualTo("isActive", true).get().await().size()
         } catch (_: Exception) { dao.getActivePlanCount() }
 
+        val pendingPayouts = try {
+            firestore.collection("referralTransactions").whereEqualTo("status", "pending").get().await().size()
+        } catch (_: Exception) { 0 }
+
         return mapOf(
             "users" to userCount,
             "pendingRequests" to pendingRequests,
             "publishedExams" to publishedExams,
-            "activePlans" to activePlans
+            "activePlans" to activePlans,
+            "pendingPayouts" to pendingPayouts
         )
     }
 

@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -18,7 +18,10 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.MedBankViewModel
 import com.example.ui.ScreenTab
 import com.example.ui.components.EmptyPlaceholder
-import com.example.ui.components.StatusBadge
+import com.example.ui.components.MedBankCard
+import com.example.ui.components.MedBankChip
+import com.example.ui.components.MedBankPillButton
+import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -33,42 +36,36 @@ fun MyResultsScreen(viewModel: MedBankViewModel) {
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault()) }
 
     Scaffold(
+        containerColor = AppBackground,
         topBar = {
             TopAppBar(
-                title = { Text("My Exam Attempts", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary) },
+                title = {
+                    Text(
+                        text = "My Exam Attempts",
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = CardSurface
                 )
             )
         },
         bottomBar = {
             Surface(
-                tonalElevation = 3.dp,
-                modifier = Modifier.fillMaxWidth()
+                color = CardSurface,
+                shadowElevation = 8.dp
             ) {
                 Box(modifier = Modifier.padding(16.dp)) {
-                    Button(
-                        onClick = { 
+                    MedBankPillButton(
+                        text = "Back to Exam Banks",
+                        onClick = {
                             viewModel.setActiveTab(ScreenTab.EXPLORER)
                             viewModel.resetExplorerNavigation()
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("results_back_to_banks_button"),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        Icon(Icons.Default.Home, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Back to Exam Banks", fontWeight = FontWeight.Bold)
-                    }
+                        icon = Icons.Default.Home,
+                        modifier = Modifier.testTag("results_back_to_banks_button")
+                    )
                 }
             }
         }
@@ -86,83 +83,89 @@ fun MyResultsScreen(viewModel: MedBankViewModel) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
                     .padding(padding)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 items(results) { res ->
                     val percentage = if (res.totalMarks > 0) ((res.score / res.totalMarks) * 100).toInt() else 0
-                    val isPassed = percentage >= 50
 
-                    ElevatedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("result_card_${res.id}"),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    // MedBankChip for the score (Green >70%, Amber 50-70%, Red <50%)
+                    val (chipColor, chipBg) = when {
+                        percentage >= 70 -> Pair(BrandSuccess, BrandSuccessPastel)
+                        percentage >= 50 -> Pair(AmberWarning, AmberWarningPastel)
+                        else -> Pair(BrandRed, BrandRedPastel)
+                    }
+
+                    // MedBankCard showing Exam Title, Attempt #, Date, and score chip
+                    MedBankCard(
+                        modifier = Modifier.testTag("result_card_${res.id}"),
+                        padding = 16.dp
                     ) {
-                        Column(modifier = Modifier.padding(18.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = res.examTitle,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Attempt #${res.attemptNumber} • ${dateFormat.format(Date(res.submittedAt))}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                    )
-                                }
-
-                                StatusBadge(
-                                    text = "$percentage%",
-                                    color = if (isPassed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                                    icon = if (isPassed) Icons.Default.CheckCircle else Icons.Default.Warning
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = res.examTitle,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Attempt #${res.attemptNumber} • ${dateFormat.format(Date(res.submittedAt))}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(14.dp))
+                            MedBankChip(
+                                text = "$percentage%",
+                                color = chipColor,
+                                bgColor = chipBg,
+                                icon = if (percentage >= 50) Icons.Default.CheckCircle else Icons.Default.Warning
+                            )
+                        }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = "${res.score.toInt()}/${res.totalMarks.toInt()} Marks",
+                                    fontWeight = FontWeight.Bold,
+                                    color = BrandBlue,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    text = "• ${res.correctCount} Correct",
+                                    color = BrandSuccess,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    text = "• ${res.wrongCount} Wrong",
+                                    color = BrandRed,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 13.sp
+                                )
+                            }
+
+                            TextButton(
+                                onClick = { viewModel.loadReview(res.id) },
+                                colors = ButtonDefaults.textButtonColors(contentColor = BrandBlue),
+                                modifier = Modifier.testTag("review_button_${res.id}")
                             ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text(
-                                        text = "${res.score.toInt()}/${res.totalMarks.toInt()} Marks",
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontSize = 13.sp
-                                    )
-                                    Text(
-                                        text = "• ${res.correctCount} Correct",
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontSize = 13.sp
-                                    )
-                                    Text(
-                                        text = "• ${res.wrongCount} Wrong",
-                                        color = MaterialTheme.colorScheme.error,
-                                        fontSize = 13.sp
-                                    )
-                                }
-
-                                TextButton(
-                                    onClick = { viewModel.loadReview(res.id) },
-                                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary),
-                                    modifier = Modifier.testTag("review_button_${res.id}")
-                                ) {
-                                    Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Review", fontWeight = FontWeight.Bold)
-                                }
+                                Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Review", fontWeight = FontWeight.Bold)
                             }
                         }
                     }

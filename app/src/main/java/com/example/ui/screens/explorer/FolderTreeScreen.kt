@@ -2,7 +2,6 @@ package com.example.ui.screens.explorer
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,15 +24,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.models.Exam
 import com.example.data.models.Subject
 import com.example.ui.MedBankViewModel
-import com.example.ui.components.EmptyPlaceholder
-import com.example.ui.components.StatusBadge
+import com.example.ui.components.*
+import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,131 +40,172 @@ fun FolderTreeScreen(viewModel: MedBankViewModel) {
     val selectedParentName by viewModel.selectedParentName.collectAsState()
     val selectedSubject by viewModel.selectedSubject.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
+    val appSettings by viewModel.appSettings.collectAsState()
+
+    var showNotificationDialog by remember { mutableStateOf(false) }
 
     // Handle Android system back button when drilled down
     BackHandler(enabled = selectedParentId != null || selectedSubject != null) {
         viewModel.navigateBackExplorer()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        // App Header / Navigation Bar
-        TopAppBar(
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        painter = painterResource(id = com.example.R.drawable.logo),
-                        contentDescription = "Medical Bank Logo",
-                        modifier = Modifier.height(32.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            text = when {
-                                selectedSubject != null -> selectedSubject!!.name
-                                selectedParentId != null -> selectedParentName
-                                selectedProgramType == "mbbs" -> "MBBS Question Banks"
-                                else -> "Licensing Exam Banks"
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                        if (selectedParentId != null || selectedSubject != null) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val msg by viewModel.accessRequestStatusMsg.collectAsState()
+    LaunchedEffect(msg) {
+        msg?.let {
+            snackbarHostState.showSnackbar(it)
+        }
+    }
+
+    Scaffold(
+        containerColor = AppBackground,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            if (selectedParentId != null || selectedSubject != null) {
+                // Secondary level TopAppBar
+                TopAppBar(
+                    title = {
+                        Column {
                             Text(
-                                text = if (selectedSubject != null) selectedParentName else "Subjects & Examinations",
+                                text = when {
+                                    selectedSubject != null -> selectedSubject!!.name
+                                    else -> selectedParentName
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = if (selectedSubject != null) selectedParentName else "Select a subject to view exams",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                                color = TextSecondary
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.navigateBackExplorer() }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = TextPrimary
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = CardSurface
+                    )
+                )
+            }
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            // ROOT LEVEL HOME HEADER
+            if (selectedParentId == null && selectedSubject == null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    // Top row: User greeting (Name + CNIC) and circular notification bell
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            MedBankIconBadge(
+                                icon = Icons.Default.Person,
+                                badgeColor = BrandBlue,
+                                backgroundColor = BrandBluePastel,
+                                size = 46.dp,
+                                iconSize = 22.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Hello, ${currentUser?.fullName?.ifBlank { "Doctor" } ?: "Doctor"}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "CNIC: ${currentUser?.cnic?.ifBlank { "Not Registered" } ?: "Not Registered"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+
+                        // Circular notification bell
+                        Surface(
+                            onClick = { showNotificationDialog = true },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .testTag("home_notification_bell"),
+                            shape = CircleShape,
+                            color = CardSurface,
+                            shadowElevation = 2.dp
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Notifications,
+                                    contentDescription = "Notifications",
+                                    tint = BrandBlue,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                // Red unread badge dot
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(BrandRed)
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = (-10).dp, y = (10).dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // MedBankBanner carousel showing announcements
+                    val announcements = remember(appSettings.announcementBanner) {
+                        if (appSettings.announcementBanner.isNotBlank()) {
+                            listOf(
+                                appSettings.announcementBanner,
+                                "Full clinical explanations enabled after exam submission.",
+                                "Unlock your next term pass with instant WhatsApp admin verification."
+                            )
+                        } else {
+                            listOf(
+                                "Welcome to Medical Bank! Practice high-yield clinical MCQs anytime.",
+                                "New Mock Mode with negative marking now active.",
+                                "All-Pakistan MBBS & Licensing standardized question banks."
                             )
                         }
                     }
-                }
-            },
-            navigationIcon = {
-                if (selectedParentId != null || selectedSubject != null) {
-                    IconButton(onClick = { viewModel.navigateBackExplorer() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.FolderSpecial,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.padding(start = 16.dp, end = 8.dp)
+                    MedBankBanner(announcements = announcements)
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // MedBankSegmentedTabs for MBBS vs Licensing
+                    MedBankSegmentedTabs(
+                        tabs = listOf("MBBS Years 1–6", "Licensing Pathways"),
+                        selectedIndex = if (selectedProgramType == "mbbs") 0 else 1,
+                        onTabSelected = { idx ->
+                            viewModel.selectProgramType(if (idx == 0) "mbbs" else "licensing")
+                        },
+                        modifier = Modifier.testTag("home_segmented_tabs")
                     )
                 }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                actionIconContentColor = MaterialTheme.colorScheme.onPrimary
-            )
-        )
-
-        // Top-Level Track Toggle (Only shown at root level)
-        if (selectedParentId == null && selectedSubject == null) {
-            TabRow(
-                selectedTabIndex = if (selectedProgramType == "mbbs") 0 else 1,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(12.dp)),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                indicator = {}
-            ) {
-                Tab(
-                    selected = selectedProgramType == "mbbs",
-                    onClick = { viewModel.selectProgramType("mbbs") },
-                    selectedContentColor = MaterialTheme.colorScheme.primary,
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("MBBS Years 1–6", fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                )
-                Tab(
-                    selected = selectedProgramType == "licensing",
-                    onClick = { viewModel.selectProgramType("licensing") },
-                    selectedContentColor = MaterialTheme.colorScheme.primary,
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.VerifiedUser, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Licensing Pathways", fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                )
             }
-        }
 
-        // CONTENT AREA BASED ON NAVIGATION DEPTH
-        val snackbarHostState = remember { SnackbarHostState() }
-        val msg by viewModel.accessRequestStatusMsg.collectAsState()
-        LaunchedEffect(msg) {
-            msg?.let {
-                snackbarHostState.showSnackbar(it)
-            }
-        }
-        
-        Scaffold(
-            snackbarHost = { SnackbarHost(snackbarHostState) }
-        ) { padding ->
-            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // CONTENT AREA BASED ON NAVIGATION DEPTH
+            Box(modifier = Modifier.fillMaxSize()) {
                 when {
                     // LEVEL 3: EXAM LIST UNDER A SUBJECT
                     selectedSubject != null -> {
@@ -198,6 +237,39 @@ fun FolderTreeScreen(viewModel: MedBankViewModel) {
             }
         }
     }
+
+    if (showNotificationDialog) {
+        AlertDialog(
+            onDismissRequest = { showNotificationDialog = false },
+            icon = { Icon(Icons.Default.Notifications, contentDescription = null, tint = BrandBlue) },
+            title = { Text("Announcements", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        appSettings.announcementBanner.ifBlank {
+                            "Welcome to Medical Bank! Study questions are curated by medical specialists."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextPrimary
+                    )
+                    Text(
+                        "FCM Push Notifications are configured. You will receive updates on access approvals and new exam papers.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showNotificationDialog = false },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandBlue)
+                ) {
+                    Text("Close")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -215,53 +287,52 @@ fun MbbsYearsGrid(viewModel: MedBankViewModel) {
             columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             items(activeYears) { year ->
-                ElevatedCard(
+                MedBankCard(
                     onClick = { viewModel.selectParent(year.id, year.name) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .testTag("year_card_${year.yearNumber}"),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    modifier = Modifier.testTag("year_card_${year.yearNumber}")
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.SpaceBetween
+                    MedBankIconBadge(
+                        icon = Icons.Default.School,
+                        badgeColor = BrandBlue,
+                        backgroundColor = BrandBluePastel,
+                        size = 44.dp
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = year.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Year ${year.yearNumber} Question Banks",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "Y${year.yearNumber}",
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 16.sp
-                            )
-                        }
-
-                        Column {
-                            Text(
-                                text = year.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Tap to view subjects",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        }
+                        Text(
+                            text = "View Subjects",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = BrandBlue
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = BrandBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
             }
@@ -283,58 +354,52 @@ fun LicensingPathwaysList(viewModel: MedBankViewModel) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(activePathways) { path ->
-                ElevatedCard(
+                MedBankCard(
                     onClick = { viewModel.selectParent(path.id, path.name) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("pathway_card_${path.code}"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    modifier = Modifier.testTag("pathway_card_${path.code}")
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = path.code.take(4),
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 13.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(16.dp))
-
+                        MedBankIconBadge(
+                            icon = Icons.Default.VerifiedUser,
+                            badgeColor = BrandRed,
+                            backgroundColor = BrandRedPastel,
+                            size = 46.dp
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = path.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                MedBankChip(
+                                    text = path.code,
+                                    color = BrandRed,
+                                    bgColor = BrandRedPastel
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = path.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Standardized licensing question bank",
+                                text = "Standardized licensing exam question bank",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = TextSecondary
                             )
                         }
-
                         Icon(
-                            imageVector = Icons.Default.ChevronRight,
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            tint = TextTertiary,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -366,54 +431,39 @@ fun SubjectListContent(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(subjects) { subject ->
-                ElevatedCard(
+                MedBankCard(
                     onClick = { viewModel.selectSubject(subject) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("subject_card_${subject.id}"),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    modifier = Modifier.testTag("subject_card_${subject.id}")
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Bookmark,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
+                        MedBankIconBadge(
+                            icon = Icons.Default.MenuBook,
+                            badgeColor = BrandBlue,
+                            backgroundColor = BrandBluePastel
+                        )
                         Spacer(modifier = Modifier.width(14.dp))
-
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = subject.name,
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Tap to explore available exams",
+                                text = "High-yield clinical MCQs and mocks",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = TextSecondary
                             )
                         }
-
                         Icon(
-                            imageVector = Icons.Default.ChevronRight,
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            tint = TextTertiary,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -429,6 +479,12 @@ fun ExamListContent(
 ) {
     val exams by viewModel.repository.observePublishedExamsBySubject(subject.id).collectAsState(initial = emptyList())
     val currentUser by viewModel.currentUser.collectAsState()
+    val startingExamId by viewModel.isStartingExam.collectAsState()
+
+    // Pre-fetch data in LaunchedEffect to eliminate button lag
+    LaunchedEffect(subject.id) {
+        viewModel.preloadExamsForSubject(subject)
+    }
 
     if (exams.isEmpty()) {
         EmptyPlaceholder(
@@ -455,125 +511,149 @@ fun ExamListContent(
                     isUnlocked -> 3 // Approved/Active
                     isExpired -> 4 // Expired
                     isPending -> 2 // Pending
-                    else -> 1 // Not Requested
+                    else -> 1 // Not Requested (Locked)
                 }
 
-                ElevatedCard(
+                val isStartingThisExam = startingExamId == exam.id
+
+                // Content list: Use MedBankCard for each exam. Show lock status using MedBankChip
+                MedBankCard(
                     onClick = {
                         when (state) {
                             3 -> viewModel.startExam(exam)
                             1, 4 -> viewModel.openAccessRequestSheet(exam)
-                            else -> {} // Do nothing
+                            else -> {}
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("exam_card_${exam.id}"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = if (state == 3) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (state == 3) 2.dp else 0.dp)
+                    modifier = Modifier.testTag("exam_card_${exam.id}")
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Text(
+                            text = exam.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // Show lock status using MedBankChip (Red for LOCKED)
+                        when (state) {
+                            3 -> MedBankChip(text = "ACTIVE", color = BrandSuccess, icon = Icons.Default.CheckCircle)
+                            2 -> MedBankChip(text = "PENDING", color = AmberWarning, icon = Icons.Default.Schedule)
+                            4 -> MedBankChip(text = "EXPIRED", color = BrandRed, icon = Icons.Default.Warning)
+                            else -> MedBankChip(text = "LOCKED", color = BrandRed, icon = Icons.Default.Lock)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.HelpOutline, contentDescription = null, modifier = Modifier.size(15.dp), tint = TextSecondary)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("${exam.questionCount} Qs", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(15.dp), tint = TextSecondary)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("${exam.durationMin} mins", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Grade, contentDescription = null, modifier = Modifier.size(15.dp), tint = TextSecondary)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("${exam.totalMarks.toInt()} Marks", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        }
+                        if (exam.negativeMarking > 0.0) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.RemoveCircleOutline, contentDescription = null, modifier = Modifier.size(15.dp), tint = BrandRed)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("-${exam.negativeMarking}", style = MaterialTheme.typography.bodySmall, color = BrandRed)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (state == 3) {
                             Text(
-                                text = exam.title,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
+                                text = "Unlocked until ${java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(ent!!.expiresAt))}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = BrandSuccess,
+                                fontWeight = FontWeight.SemiBold
                             )
-
-                            when (state) {
-                                2 -> StatusBadge(text = "PENDING", color = Color(0xFFFFA000), icon = Icons.Default.Schedule)
-                                3 -> StatusBadge(text = "UNLOCKED", color = Color(0xFF388E3C), icon = Icons.Default.LockOpen)
-                                4 -> StatusBadge(text = "EXPIRED", color = MaterialTheme.colorScheme.error, icon = Icons.Default.Warning)
-                                else -> {}
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.HelpOutline, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("${exam.questionCount} Qs", style = MaterialTheme.typography.bodySmall)
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("${exam.durationMin} mins", style = MaterialTheme.typography.bodySmall)
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Grade, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("${exam.totalMarks.toInt()} Marks", style = MaterialTheme.typography.bodySmall)
-                            }
-                            if (exam.negativeMarking > 0.0) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.RemoveCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("-${exam.negativeMarking}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (state == 3) {
-                                Text(
-                                    text = "Unlocked until ${java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault()).format(java.util.Date(ent!!.expiresAt))}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                FilledTonalButton(
-                                    onClick = { viewModel.startExam(exam) },
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Button(
+                                onClick = { viewModel.startExam(exam) },
+                                enabled = !isStartingThisExam,
+                                shape = CircleShape, // Pill
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = BrandBlue,
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier.testTag("start_exam_button_${exam.id}")
+                            ) {
+                                if (isStartingThisExam) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color.White
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Start Exam")
-                                }
-                            } else if (state == 2) {
-                                Button(
-                                    onClick = {},
-                                    enabled = false,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA000)),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Text("Starting...", fontSize = 13.sp)
+                                } else {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Requested — Pending Approval")
+                                    Text("Start Exam", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
-                            } else {
-                                Button(
-                                    onClick = { viewModel.openAccessRequestSheet(exam) },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(if (state == 4) "Renew Access" else "Request Access", fontWeight = FontWeight.Bold)
-                                }
+                            }
+                        } else if (state == 2) {
+                            Text(
+                                text = "Payment proof under review",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AmberWarning,
+                                fontWeight = FontWeight.Medium
+                            )
+                            OutlinedButton(
+                                onClick = {},
+                                enabled = false,
+                                shape = CircleShape,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AmberWarning),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = AmberWarning)
+                            ) {
+                                Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Verification Pending", fontSize = 12.sp)
+                            }
+                        } else {
+                            Text(
+                                text = if (state == 4) "Pass expired" else "Subscription required",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = BrandRed,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Button(
+                                onClick = { viewModel.openAccessRequestSheet(exam) },
+                                shape = CircleShape, // Pill
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = BrandRed,
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier.testTag("unlock_exam_button_${exam.id}")
+                            ) {
+                                Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Unlock Bank", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

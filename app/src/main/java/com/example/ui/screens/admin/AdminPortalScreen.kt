@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -17,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -32,14 +34,25 @@ import com.example.ui.components.StatTile
 import com.example.ui.components.StatusBadge
 import kotlinx.coroutines.launch
 import java.util.UUID
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
+import com.example.ui.components.*
+import com.example.ui.theme.*
+import com.example.ui.screens.legal.LegalContentScreen
 
 enum class AdminSection {
     DASHBOARD,
     REQUESTS,
+    PAYOUTS,
     USERS,
     CONTENT,
     BULK_IMPORT,
     PLANS,
+    LEGAL,
     SETTINGS
 }
 
@@ -60,7 +73,7 @@ fun AdminPortalScreen(viewModel: MedBankViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(AppBackground)
     ) {
         TopAppBar(
             title = {
@@ -76,15 +89,12 @@ fun AdminPortalScreen(viewModel: MedBankViewModel) {
                         text = "Admin Portal",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = TextPrimary
                     )
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                containerColor = CardSurface
             )
         )
 
@@ -101,22 +111,27 @@ fun AdminPortalScreen(viewModel: MedBankViewModel) {
                 FilterChip(
                     selected = isSel,
                     onClick = { activeSection = section },
+                    shape = CircleShape,
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                        selectedLabelColor = MaterialTheme.colorScheme.primary
+                        selectedContainerColor = BrandBlue,
+                        selectedLabelColor = Color.White,
+                        containerColor = CardSurface,
+                        labelColor = TextSecondary
                     ),
                     label = {
                         Text(
                             text = when (section) {
                                 AdminSection.DASHBOARD -> "Dashboard"
                                 AdminSection.REQUESTS -> "Access Requests"
+                                AdminSection.PAYOUTS -> "Referral Payouts"
                                 AdminSection.USERS -> "Users & Devices"
                                 AdminSection.CONTENT -> "Content Hierarchy"
                                 AdminSection.BULK_IMPORT -> "Bulk Import"
                                 AdminSection.PLANS -> "Plans & Passes"
+                                AdminSection.LEGAL -> "Legal Content"
                                 AdminSection.SETTINGS -> "App Config"
                             },
-                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
                             fontSize = 12.sp
                         )
                     }
@@ -129,10 +144,12 @@ fun AdminPortalScreen(viewModel: MedBankViewModel) {
             when (activeSection) {
                 AdminSection.DASHBOARD -> AdminDashboardView(viewModel = viewModel, onNavigate = { activeSection = it })
                 AdminSection.REQUESTS -> AdminRequestsView(viewModel = viewModel)
+                AdminSection.PAYOUTS -> AdminPayoutsScreen(viewModel = viewModel)
                 AdminSection.USERS -> AdminUsersView(viewModel = viewModel)
                 AdminSection.CONTENT -> AdminContentView(viewModel = viewModel)
                 AdminSection.BULK_IMPORT -> AdminBulkImportView(viewModel = viewModel)
                 AdminSection.PLANS -> AdminPlansView(viewModel = viewModel)
+                AdminSection.LEGAL -> LegalContentScreen(viewModel = viewModel, onBack = { activeSection = AdminSection.DASHBOARD })
                 AdminSection.SETTINGS -> AdminSettingsView(viewModel = viewModel)
             }
         }
@@ -147,97 +164,197 @@ fun AdminDashboardView(viewModel: MedBankViewModel, onNavigate: (AdminSection) -
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Overview Metrics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
+        Text("Overview Metrics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
 
+        // 2x2 grid of Stat Cards (Users, Pending Requests, Exams, Plans)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatTile(
-                title = "Total Users",
-                value = "${stats["users"] ?: 0}",
-                icon = Icons.Default.People,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigate(AdminSection.USERS) }
-            )
-            StatTile(
-                title = "Pending Requests",
-                value = "${stats["pendingRequests"] ?: 0}",
-                icon = Icons.Default.PendingActions,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigate(AdminSection.REQUESTS) }
-            )
+            MedBankCard(
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("admin_stat_users"),
+                onClick = { onNavigate(AdminSection.USERS) },
+                padding = 16.dp
+            ) {
+                MedBankIconBadge(
+                    icon = Icons.Default.People,
+                    badgeColor = BrandBlue,
+                    backgroundColor = BrandBluePastel,
+                    size = 42.dp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "${stats["users"] ?: 0}",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextPrimary
+                )
+                Text(text = "Total Users", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+            }
+
+            MedBankCard(
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("admin_stat_requests"),
+                onClick = { onNavigate(AdminSection.REQUESTS) },
+                padding = 16.dp
+            ) {
+                MedBankIconBadge(
+                    icon = Icons.Default.PendingActions,
+                    badgeColor = BrandRed,
+                    backgroundColor = BrandRedPastel,
+                    size = 42.dp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "${stats["pendingRequests"] ?: 0}",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = BrandRed
+                )
+                Text(text = "Pending Requests", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+            }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatTile(
-                title = "Published Exams",
-                value = "${stats["publishedExams"] ?: 0}",
-                icon = Icons.Default.Assignment,
-                color = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigate(AdminSection.CONTENT) }
+            MedBankCard(
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("admin_stat_exams"),
+                onClick = { onNavigate(AdminSection.CONTENT) },
+                padding = 16.dp
+            ) {
+                MedBankIconBadge(
+                    icon = Icons.Default.Assignment,
+                    badgeColor = BrandSuccess,
+                    backgroundColor = BrandSuccessPastel,
+                    size = 42.dp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "${stats["publishedExams"] ?: 0}",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextPrimary
+                )
+                Text(text = "Published Exams", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+            }
+
+            MedBankCard(
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("admin_stat_plans"),
+                onClick = { onNavigate(AdminSection.PLANS) },
+                padding = 16.dp
+            ) {
+                MedBankIconBadge(
+                    icon = Icons.Default.CardMembership,
+                    badgeColor = AmberWarning,
+                    backgroundColor = AmberWarningPastel,
+                    size = 42.dp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "${stats["activePlans"] ?: 0}",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextPrimary
+                )
+                Text(text = "Active Plans", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+            }
+        }
+
+        Text("Portal Navigation", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
+
+        // Menu List using MedBankListItem inside a MedBankCard
+        MedBankCard(
+            padding = 8.dp
+        ) {
+            MedBankListItem(
+                title = "Content Manager",
+                subtitle = "MBBS years, licensing pathways, subjects & exams",
+                icon = Icons.Default.FolderOpen,
+                iconColor = BrandBlue,
+                iconBgColor = BrandBluePastel,
+                onClick = { onNavigate(AdminSection.CONTENT) },
+                modifier = Modifier.testTag("admin_nav_content")
             )
-            StatTile(
-                title = "Active Plans",
-                value = "${stats["activePlans"] ?: 0}",
+            MedBankListItem(
+                title = "Membership Plans",
+                subtitle = "Manage pass durations, prices, and track scopes",
                 icon = Icons.Default.CardMembership,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigate(AdminSection.PLANS) }
+                iconColor = BrandBlue,
+                iconBgColor = BrandBluePastel,
+                onClick = { onNavigate(AdminSection.PLANS) },
+                modifier = Modifier.testTag("admin_nav_plans")
+            )
+            MedBankListItem(
+                title = "Access Requests",
+                subtitle = "Verify payment receipts and activate student access",
+                icon = Icons.Default.Verified,
+                iconColor = BrandBlue,
+                iconBgColor = BrandBluePastel,
+                onClick = { onNavigate(AdminSection.REQUESTS) },
+                modifier = Modifier.testTag("admin_nav_requests")
+            )
+            MedBankListItem(
+                title = "Referral Payouts",
+                subtitle = "Manage student commissions & mark bank transfers as paid",
+                icon = Icons.Default.Paid,
+                iconColor = BrandSuccess,
+                iconBgColor = BrandSuccessPastel,
+                trailingText = "${stats["pendingPayouts"] ?: 0} Pending",
+                onClick = { onNavigate(AdminSection.PAYOUTS) },
+                modifier = Modifier.testTag("admin_nav_payouts")
+            )
+            MedBankListItem(
+                title = "Bulk Import",
+                subtitle = "Upload exam questions & explanations via pipe format",
+                icon = Icons.Default.CloudUpload,
+                iconColor = BrandBlue,
+                iconBgColor = BrandBluePastel,
+                onClick = { onNavigate(AdminSection.BULK_IMPORT) },
+                modifier = Modifier.testTag("admin_nav_bulk_import")
+            )
+            MedBankListItem(
+                title = "Legal Content",
+                subtitle = "Edit Privacy Policy & Terms and Conditions",
+                icon = Icons.Default.Gavel,
+                iconColor = BrandBlue,
+                iconBgColor = BrandBluePastel,
+                onClick = { onNavigate(AdminSection.LEGAL) },
+                modifier = Modifier.testTag("admin_nav_legal")
+            )
+            MedBankListItem(
+                title = "Settings",
+                subtitle = "Configure WhatsApp contact & announcements banner",
+                icon = Icons.Default.Settings,
+                iconColor = BrandBlue,
+                iconBgColor = BrandBluePastel,
+                showDivider = false,
+                onClick = { onNavigate(AdminSection.SETTINGS) },
+                modifier = Modifier.testTag("admin_nav_settings")
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("Quick Content Management", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
-
-        ElevatedCard(
-            onClick = { onNavigate(AdminSection.BULK_IMPORT) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CloudUpload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Bulk Import Medical Exam", fontWeight = FontWeight.Bold)
-                    Text("Upload pipe-delimited questions & clinical explanations", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                }
-                Icon(Icons.Default.ChevronRight, contentDescription = null)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ElevatedCard(
-            onClick = { onNavigate(AdminSection.REQUESTS) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Verified, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Review Student Access Requests", fontWeight = FontWeight.Bold)
-                    Text("Verify payment receipts and activate entitlements", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                }
-                Icon(Icons.Default.ChevronRight, contentDescription = null)
-            }
-        }
+        Spacer(modifier = Modifier.height(20.dp))
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminRequestsView(viewModel: MedBankViewModel) {
     val requests by viewModel.repository.observeAllAccessRequests().collectAsState(initial = emptyList())
+    val allPlans by viewModel.repository.observeAllPlans().collectAsState(initial = emptyList())
+    val context = LocalContext.current
+
     var selectedReq by remember { mutableStateOf<AccessRequest?>(null) }
     var adminNote by remember { mutableStateOf("") }
+    var overridePlan by remember { mutableStateOf<MembershipPlan?>(null) }
+    var planDropdownExpanded by remember { mutableStateOf(false) }
+    var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
 
     if (requests.isEmpty()) {
         EmptyPlaceholder(
@@ -251,8 +368,12 @@ fun AdminRequestsView(viewModel: MedBankViewModel) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(requests) { req ->
+                val isPdf = req.paymentProofUrl.contains(".pdf", ignoreCase = true) ||
+                        req.paymentProofUrl.contains("application%2Fpdf", ignoreCase = true)
+                val hasProof = req.paymentProofUrl.isNotBlank() && req.paymentProofUrl != "payment_receipt.jpg"
+
                 ElevatedCard(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("admin_request_card_${req.id}"),
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -268,10 +389,64 @@ fun AdminRequestsView(viewModel: MedBankViewModel) {
                             )
                         }
 
-                        Text("CNIC: ${req.cnic} • Plan: ${req.planName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-                        Text("Payment Proof: ${req.paymentProofUrl}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "CNIC: ${req.cnic} • Plan: ${req.planName.ifBlank { req.planId }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = "Scope: ${req.scopeType.uppercase()} (${req.scopeId})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+
+                        // Bug 5: Payment proof display on request card
+                        if (hasProof) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            if (isPdf) {
+                                OutlinedButton(
+                                    onClick = {
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(req.paymentProofUrl)).apply {
+                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("MEDBANK_PDF", "Cannot open PDF: ${e.message}")
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Open PDF Receipt", fontSize = 12.sp)
+                                }
+                            } else {
+                                AsyncImage(
+                                    model = req.paymentProofUrl,
+                                    contentDescription = "Payment Receipt",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(140.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .clickable { fullScreenImageUrl = req.paymentProofUrl },
+                                    contentScale = ContentScale.Fit
+                                )
+                                Text(
+                                    text = "Tap to enlarge receipt",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        } else if (req.paymentProofUrl.isNotBlank()) {
+                            Text("Payment Proof: ${req.paymentProofUrl}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
 
                         if (req.adminNote.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text("Note: ${req.adminNote}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
 
@@ -279,7 +454,11 @@ fun AdminRequestsView(viewModel: MedBankViewModel) {
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Button(
-                                    onClick = { selectedReq = req },
+                                    onClick = {
+                                        selectedReq = req
+                                        overridePlan = allPlans.find { it.id == req.planId }
+                                        adminNote = ""
+                                    },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = MaterialTheme.colorScheme.primary,
                                         contentColor = MaterialTheme.colorScheme.onPrimary
@@ -304,28 +483,132 @@ fun AdminRequestsView(viewModel: MedBankViewModel) {
         }
     }
 
+    // Detail & Approval Dialog with Plan Override and Payment Proof Viewer
     if (selectedReq != null) {
+        val req = selectedReq!!
+        val isPdf = req.paymentProofUrl.contains(".pdf", ignoreCase = true) ||
+                req.paymentProofUrl.contains("application%2Fpdf", ignoreCase = true)
+        val hasProof = req.paymentProofUrl.isNotBlank() && req.paymentProofUrl != "payment_receipt.jpg"
+
         AlertDialog(
             onDismissRequest = { selectedReq = null },
-            title = { Text("Approve Access for ${selectedReq!!.studentName}") },
+            title = { Text("Approve Access for ${req.studentName}") },
             text = {
-                Column {
-                    Text("Grant 30 days full entitlement for ${selectedReq!!.planName}.")
-                    Spacer(modifier = Modifier.height(10.dp))
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("CNIC: ${req.cnic}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Requested Plan: ${req.planName.ifBlank { req.planId }}", style = MaterialTheme.typography.bodyMedium)
+
+                    // Bug 3: Admin Plan Override Dropdown
+                    Text("Override Plan (Optional):", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+
+                    val activePlansList = allPlans.filter { it.isActive }
+                    val currentSelectedPlanName = overridePlan?.name ?: if (activePlansList.any { it.id == req.planId }) {
+                        activePlansList.first { it.id == req.planId }.name
+                    } else {
+                        req.planName.ifBlank { "Select Plan to Override" }
+                    }
+
+                    ExposedDropdownMenuBox(
+                        expanded = planDropdownExpanded,
+                        onExpandedChange = { planDropdownExpanded = !planDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = currentSelectedPlanName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Active Plan") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = planDropdownExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = planDropdownExpanded,
+                            onDismissRequest = { planDropdownExpanded = false }
+                        ) {
+                            activePlansList.forEach { p ->
+                                DropdownMenuItem(
+                                    text = { Text("${p.name} (${p.durationDays} days • ${p.currency} ${p.price})") },
+                                    onClick = {
+                                        overridePlan = p
+                                        planDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    val effectiveDuration = overridePlan?.durationDays ?: 30
+                    Text(
+                        text = "Granting $effectiveDuration days entitlement under ${overridePlan?.name ?: req.planName.ifBlank { "Requested Pass" }}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    // Bug 5: Payment Proof Preview in dialog
+                    if (hasProof) {
+                        Text("Payment Proof Receipt:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        if (isPdf) {
+                            Button(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(req.paymentProofUrl)).apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("MEDBANK_PDF", "Cannot open PDF: ${e.message}")
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Open PDF Proof")
+                            }
+                        } else {
+                            AsyncImage(
+                                model = req.paymentProofUrl,
+                                contentDescription = "Payment Receipt",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { fullScreenImageUrl = req.paymentProofUrl },
+                                contentScale = ContentScale.Fit
+                            )
+                            Text(
+                                text = "Tap image to view full screen",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+
                     OutlinedTextField(
                         value = adminNote,
                         onValueChange = { adminNote = it },
                         label = { Text("Admin Note (Optional)") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
                     )
                 }
             },
             confirmButton = {
+                // Bug 1: Approval writes to Firestore only, does NOT sign out or switch auth session
                 Button(
                     onClick = {
-                        viewModel.approveRequest(selectedReq!!, adminNote)
+                        val requestToApprove = selectedReq!!
+                        val planToGrant = overridePlan
+                        viewModel.approveRequest(requestToApprove, adminNote, overridePlan = planToGrant)
                         selectedReq = null
                         adminNote = ""
+                        overridePlan = null
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
@@ -336,9 +619,52 @@ fun AdminRequestsView(viewModel: MedBankViewModel) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { selectedReq = null }) { Text("Cancel") }
+                TextButton(onClick = {
+                    selectedReq = null
+                    overridePlan = null
+                }) {
+                    Text("Cancel")
+                }
             }
         )
+    }
+
+    // Bug 5: Full-screen Image Viewer on tap
+    if (fullScreenImageUrl != null) {
+        Dialog(
+            onDismissRequest = { fullScreenImageUrl = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.95f))
+                    .clickable { fullScreenImageUrl = null },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = fullScreenImageUrl,
+                    contentDescription = "Full Screen Payment Receipt",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentScale = ContentScale.Fit
+                )
+                IconButton(
+                    onClick = { fullScreenImageUrl = null },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close Full Screen",
+                        tint = Color.White,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+            }
+        }
     }
 }
 

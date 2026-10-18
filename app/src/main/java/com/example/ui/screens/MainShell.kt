@@ -18,7 +18,7 @@ import com.example.ui.screens.exam.ExamPlayerScreen
 import com.example.ui.screens.exam.ExamResultScreen
 import com.example.ui.screens.exam.ExamReviewScreen
 import com.example.ui.screens.explorer.FolderTreeScreen
-import com.example.ui.screens.profile.ProfileScreen
+import com.example.ui.screens.profile.*
 import com.example.ui.screens.results.MyResultsScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,9 +30,33 @@ fun MainShell(viewModel: MedBankViewModel) {
     val playerState by viewModel.playerState.collectAsState()
     val reviewData by viewModel.reviewData.collectAsState()
     val latestResult by viewModel.latestResult.collectAsState()
+    val activeLegalViewer by viewModel.activeLegalViewer.collectAsState()
+    val activeProfileScreen by viewModel.activeProfileScreen.collectAsState()
 
-    // Full screen overlays for Exam taking & Review
+    // Full screen overlays for Exam taking, Review, Legal Text & Profile Sub-Screens
     when {
+        activeLegalViewer != null -> {
+            com.example.ui.screens.legal.LegalTextViewerScreen(
+                type = activeLegalViewer!!,
+                viewModel = viewModel,
+                onBack = { viewModel.closeLegalViewer() }
+            )
+            return
+        }
+        activeProfileScreen != null -> {
+            when (activeProfileScreen) {
+                "account" -> AccountDetailsScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
+                "help" -> HelpSupportScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
+                "tutorial" -> AppTutorialScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
+                "notifications" -> NotificationPreferencesScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
+                "device" -> DeviceBindingScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
+                "analytics" -> StudentAnalyticsScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
+                "membership" -> MembershipScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
+                "refer_earn" -> ReferEarnScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
+                else -> ProfileScreen(viewModel = viewModel)
+            }
+            return
+        }
         reviewData != null -> {
             ExamReviewScreen(viewModel = viewModel)
             return

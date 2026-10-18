@@ -11,27 +11,29 @@ import androidx.core.view.WindowCompat
 
 private val LightColors = lightColorScheme(
     primary = BrandBlue,
-    onPrimary = OnBrandBlue,
-    primaryContainer = BrandBlueContainer,
-    onPrimaryContainer = OnBrandBlueContainer,
+    onPrimary = CardSurface,
+    primaryContainer = BrandBluePastel,
+    onPrimaryContainer = BrandBlue,
     secondary = BrandRed,
-    onSecondary = OnBrandRed,
-    secondaryContainer = BrandRedContainer,
-    onSecondaryContainer = OnBrandRedContainer,
-    tertiary = BrandDarkerBlue,
-    onTertiary = OnBrandDarkerBlue,
+    onSecondary = CardSurface,
+    secondaryContainer = BrandRedPastel,
+    onSecondaryContainer = BrandRed,
+    tertiary = BrandSuccess,
+    onTertiary = CardSurface,
+    tertiaryContainer = BrandSuccessPastel,
+    onTertiaryContainer = BrandSuccess,
     error = BrandRed,
-    onError = OnBrandRed,
-    errorContainer = BrandErrorContainer,
-    onErrorContainer = OnBrandErrorContainer,
-    background = BrandBackground,
-    onBackground = BrandBlack,
-    surface = BrandSurface,
-    onSurface = BrandBlack,
-    surfaceVariant = BrandSurfaceVariant,
-    onSurfaceVariant = BrandOnSurfaceVariant,
-    outline = BrandOutline,
-    outlineVariant = BrandOutlineVariant,
+    onError = CardSurface,
+    errorContainer = BrandRedPastel,
+    onErrorContainer = BrandRed,
+    background = AppBackground,
+    onBackground = TextPrimary,
+    surface = CardSurface,
+    onSurface = TextPrimary,
+    surfaceVariant = BrandBluePastel.copy(alpha = 0.5f),
+    onSurfaceVariant = TextSecondary,
+    outline = BorderLight,
+    outlineVariant = DividerColor,
     scrim = BrandScrim
 )
 
@@ -46,9 +48,10 @@ fun MedBankTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
-                window.statusBarColor = colorScheme.primary.toArgb()
-                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
-                WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = true
+                window.statusBarColor = colorScheme.background.toArgb()
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = true
+                controller.isAppearanceLightNavigationBars = true
             }
         }
     }
@@ -56,6 +59,7 @@ fun MedBankTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = Shapes,
         content = content
     )
 }

@@ -31,7 +31,7 @@ import com.example.ui.MedBankViewModel
 import com.example.ui.screens.MainShell
 import com.example.ui.screens.auth.AuthScreen
 import com.example.ui.theme.MedBankTheme
-import com.google.firebase.firestore.FieldValue
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.delay
@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MedBankViewModel by viewModels()
     private val TAG = "MainActivity"
+    private var authStateListener: FirebaseAuth.AuthStateListener? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -60,6 +61,32 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // Setup AuthStateListener to save FCM token to Firestore when the user successfully logs in
+        authStateListener = FirebaseAuth.AuthStateListener { auth ->
+            if (auth.currentUser != null) {
+                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                    if (task.isSuccessful && FirebaseAuth.getInstance().currentUser != null) {
+                        val token = task.result
+                        val uid = FirebaseAuth.getInstance().currentUser!!.uid
+                        FirebaseFirestore.getInstance().collection("users").document(uid)
+                            .update("fcmToken", token)
+                            .addOnSuccessListener { Log.d("FCM_TOKEN", "Token saved to Firestore: $token") }
+                            .addOnFailureListener { e -> Log.e("FCM_TOKEN", "Failed to save token", e) }
+
+                        try {
+                            val dbId = getString(R.string.firestore_database_id)
+                            if (dbId.isNotBlank()) {
+                                FirebaseFirestore.getInstance(dbId).collection("users").document(uid)
+                                    .update("fcmToken", token)
+                                    .addOnSuccessListener { Log.d("FCM_TOKEN", "Token saved to Firestore: $token") }
+                                    .addOnFailureListener { e -> Log.e("FCM_TOKEN", "Failed to save token", e) }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
             }
         }
 
@@ -84,7 +111,7 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(currentUser?.uid) {
                             val user = currentUser
                             if (user != null) {
-                                delay(4000) // Allow more time for Firebase to initialize
+                                delay(1000)
                                 registerFcmTokenAndTopics(user.uid, user.programType, user.mbbsYear, user.licensingPath, user.notificationOptIn)
                             }
                         }
@@ -100,48 +127,45 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        authStateListener?.let {
+            FirebaseAuth.getInstance().addAuthStateListener(it)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        authStateListener?.let {
+            FirebaseAuth.getInstance().removeAuthStateListener(it)
+        }
+    }
+
     private fun registerFcmTokenAndTopics(uid: String, programType: String, mbbsYear: Int?, licensingPath: String?, notificationOptIn: Boolean) {
-        Log.d("MEDBANK_FCM", "GPS=${com.google.android.gms.common.GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this)}")
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            val e = task.exception
-            if (!task.isSuccessful) {
-                Log.e("MEDBANK_FCM", "FAIL class=${e?.javaClass?.simpleName} msg=${e?.message}")
-            } else {
-                Log.d("MEDBANK_FCM", "OK token=${task.result}")
-                val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-                if (uid != null) {
-                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                        .collection("users").document(uid)
-                        .update("fcmToken", task.result)
-                        .addOnSuccessListener { Log.d("MEDBANK_FCM", "Firestore write OK for $uid") }
-                        .addOnFailureListener { Log.e("MEDBANK_FCM", "Firestore write FAIL: ${it.message}") }
-                } else {
-                    Log.e("MEDBANK_FCM", "User is null when writing token")
-                }
+            if (task.isSuccessful && FirebaseAuth.getInstance().currentUser != null) {
+                val token = task.result
+                val currentUid = FirebaseAuth.getInstance().currentUser!!.uid
+                FirebaseFirestore.getInstance().collection("users").document(currentUid)
+                    .update("fcmToken", token)
+                    .addOnSuccessListener { Log.d("FCM_TOKEN", "Token saved to Firestore: $token") }
+                    .addOnFailureListener { e -> Log.e("FCM_TOKEN", "Failed to save token", e) }
+
+                try {
+                    val dbId = getString(R.string.firestore_database_id)
+                    if (dbId.isNotBlank()) {
+                        FirebaseFirestore.getInstance(dbId).collection("users").document(currentUid)
+                            .update("fcmToken", token)
+                            .addOnSuccessListener { Log.d("FCM_TOKEN", "Token saved to Firestore: $token") }
+                            .addOnFailureListener { e -> Log.e("FCM_TOKEN", "Failed to save token", e) }
+                    }
+                } catch (_: Exception) {}
+            } else if (!task.isSuccessful) {
+                Log.e("FCM_TOKEN", "Failed to fetch FCM token", task.exception)
             }
         }
 
         TopicManager.subscribeUserTopics(uid, programType, mbbsYear, licensingPath, notificationOptIn)
-    }
-
-    private fun updateTokenWithRetry(uid: String, token: String, retries: Int) {
-        val firestore = FirebaseFirestore.getInstance()
-        firestore.collection("users").document(uid)
-            .update(
-                mapOf(
-                    "fcmToken" to token,
-                    "fcmTokenUpdatedAt" to FieldValue.serverTimestamp()
-                )
-            )
-            .addOnSuccessListener {
-                Log.d(TAG, "FCM token saved successfully.")
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Error saving FCM token: ${e.message}")
-                if (retries > 0) {
-                    updateTokenWithRetry(uid, token, retries - 1)
-                }
-            }
     }
 }
 
