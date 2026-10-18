@@ -33,10 +33,12 @@ import java.util.Locale
 @Composable
 fun AdminPayoutsScreen(viewModel: MedBankViewModel) {
     val pendingTransactions by viewModel.observePendingReferralTransactions().collectAsState(initial = emptyList())
+    val paidTransactions by viewModel.observePaidReferralTransactions().collectAsState(initial = emptyList())
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
 
+    var selectedTab by remember { mutableStateOf(0) } // 0: Pending, 1: History
     var selectedTransactionToPay by remember { mutableStateOf<ReferralTransaction?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
 
@@ -110,96 +112,206 @@ fun AdminPayoutsScreen(viewModel: MedBankViewModel) {
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            if (pendingTransactions.isEmpty()) {
-                EmptyPlaceholder(
-                    icon = Icons.Default.Paid,
-                    title = "No Pending Payouts",
-                    subtitle = "All referral commissions have been disbursed. When students refer peers who purchase exam subscriptions, payout requests will appear here."
+            // Segmented Filter Tabs: [ Pending ] and [ History ]
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FilterChip(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    label = { Text("Pending (${pendingTransactions.size})", fontWeight = FontWeight.Bold) },
+                    shape = CircleShape,
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = BrandBlue,
+                        selectedLabelColor = Color.White,
+                        containerColor = CardSurface,
+                        labelColor = TextSecondary
+                    ),
+                    modifier = Modifier.testTag("payout_tab_pending")
                 )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp)
-                ) {
-                    items(pendingTransactions, key = { it.id }) { tx ->
-                        MedBankCard(
-                            padding = 16.dp,
-                            modifier = Modifier.testTag("payout_card_${tx.id}")
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                FilterChip(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    label = { Text("History (${paidTransactions.size})", fontWeight = FontWeight.Bold) },
+                    shape = CircleShape,
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = BrandBlue,
+                        selectedLabelColor = Color.White,
+                        containerColor = CardSurface,
+                        labelColor = TextSecondary
+                    ),
+                    modifier = Modifier.testTag("payout_tab_history")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (selectedTab == 0) {
+                // Pending Tab
+                if (pendingTransactions.isEmpty()) {
+                    EmptyPlaceholder(
+                        icon = Icons.Default.Paid,
+                        title = "No Pending Payouts",
+                        subtitle = "All referral commissions have been disbursed. When students refer peers who purchase exam subscriptions, payout requests will appear here."
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        items(pendingTransactions, key = { it.id }) { tx ->
+                            MedBankCard(
+                                padding = 16.dp,
+                                modifier = Modifier.testTag("payout_card_${tx.id}")
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    MedBankIconBadge(
-                                        icon = Icons.Default.Person,
-                                        badgeColor = BrandBlue,
-                                        backgroundColor = BrandBluePastel,
-                                        size = 40.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = tx.referrerName.ifBlank { "Referrer (${tx.referrerUid.take(6)})" },
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        MedBankIconBadge(
+                                            icon = Icons.Default.Person,
+                                            badgeColor = BrandBlue,
+                                            backgroundColor = BrandBluePastel,
+                                            size = 40.dp
                                         )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = tx.referrerName.ifBlank { "Referrer (${tx.referrerUid.take(6)})" },
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextPrimary
+                                            )
+                                            Text(
+                                                text = "UID: ${tx.referrerUid}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = TextTertiary
+                                            )
+                                        }
+                                    }
+
+                                    val commStr = if (tx.commissionAmount % 1.0 == 0.0) tx.commissionAmount.toInt().toString() else String.format("%.2f", tx.commissionAmount)
+                                    Text(
+                                        text = "PKR $commStr",
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = BrandSuccess
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+                                HorizontalDivider(color = DividerColor, thickness = 1.dp)
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Text(
+                                    text = "Referred User: ${tx.referredName}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Subscription Plan: ${tx.planName} • Total Paid: PKR ${tx.amountPaid.toInt()} (20% Royalty)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Date: ${dateFormat.format(Date(tx.createdAt))}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextTertiary
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                MedBankPillButton(
+                                    text = "Mark as Paid",
+                                    icon = Icons.Default.CheckCircle,
+                                    isPrimary = true,
+                                    containerColor = BrandSuccess,
+                                    contentColor = Color.White,
+                                    onClick = { selectedTransactionToPay = tx },
+                                    modifier = Modifier.testTag("btn_mark_paid_${tx.id}")
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // History Tab
+                if (paidTransactions.isEmpty()) {
+                    EmptyPlaceholder(
+                        icon = Icons.Default.History,
+                        title = "No Payout History",
+                        subtitle = "Disbursed payout transactions will appear here once marked as paid."
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        items(paidTransactions, key = { it.id }) { tx ->
+                            MedBankCard(
+                                padding = 16.dp,
+                                modifier = Modifier.testTag("payout_history_card_${tx.id}")
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        MedBankIconBadge(
+                                            icon = Icons.Default.CheckCircle,
+                                            badgeColor = BrandSuccess,
+                                            backgroundColor = BrandSuccessPastel,
+                                            size = 40.dp
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = tx.referrerName.ifBlank { "Referrer" },
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextPrimary
+                                            )
+                                            Text(
+                                                text = "Referred: ${tx.referredName} (${tx.planName})",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextSecondary
+                                            )
+                                        }
+                                    }
+
+                                    val commStr = if (tx.commissionAmount % 1.0 == 0.0) tx.commissionAmount.toInt().toString() else String.format("%.2f", tx.commissionAmount)
+                                    Column(horizontalAlignment = Alignment.End) {
                                         Text(
-                                            text = "UID: ${tx.referrerUid}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextTertiary
+                                            text = "PKR $commStr",
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = BrandSuccess
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        MedBankChip(
+                                            text = "PAID",
+                                            color = BrandSuccess,
+                                            bgColor = BrandSuccessPastel
                                         )
                                     }
                                 }
 
-                                val commStr = if (tx.commissionAmount % 1.0 == 0.0) tx.commissionAmount.toInt().toString() else String.format("%.2f", tx.commissionAmount)
+                                Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "PKR $commStr",
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = BrandSuccess
+                                    text = "Paid on: ${dateFormat.format(Date(tx.paidAt ?: tx.createdAt))}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextTertiary
                                 )
                             }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-                            HorizontalDivider(color = DividerColor, thickness = 1.dp)
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Transaction details
-                            Text(
-                                text = "Referred User: ${tx.referredName}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Subscription Plan: ${tx.planName} • Total Paid: PKR ${tx.amountPaid.toInt()} (20% Royalty)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Date: ${dateFormat.format(Date(tx.createdAt))}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextTertiary
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Action Button: [ Mark as Paid ]
-                            MedBankPillButton(
-                                text = "Mark as Paid",
-                                icon = Icons.Default.CheckCircle,
-                                isPrimary = true,
-                                containerColor = BrandSuccess,
-                                contentColor = Color.White,
-                                onClick = { selectedTransactionToPay = tx },
-                                modifier = Modifier.testTag("btn_mark_paid_${tx.id}")
-                            )
                         }
                     }
                 }

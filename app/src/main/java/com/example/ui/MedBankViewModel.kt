@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.util.UUID
+import com.example.ui.screens.admin.AdminSection
+import com.example.notifications.NotificationHelper
 
 enum class ScreenTab {
     EXPLORER,
@@ -147,6 +149,18 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
     private val _adminStats = MutableStateFlow<Map<String, Int>>(emptyMap())
     val adminStats: StateFlow<Map<String, Int>> = _adminStats.asStateFlow()
 
+    private val _activeAdminSection = MutableStateFlow(AdminSection.DASHBOARD)
+    val activeAdminSection: StateFlow<AdminSection> = _activeAdminSection.asStateFlow()
+
+    fun setActiveAdminSection(section: AdminSection) {
+        _activeAdminSection.value = section
+    }
+
+    fun navigateToAdminSection(section: AdminSection) {
+        _activeAdminSection.value = section
+        _activeTab.value = ScreenTab.ADMIN
+    }
+
     // Legal Content State
     private val _legalContent = MutableStateFlow<LegalContent?>(null)
     val legalContent: StateFlow<LegalContent?> = _legalContent.asStateFlow()
@@ -166,6 +180,36 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
     fun openProfileScreen(screen: String?) {
         _activeProfileScreen.value = screen
     }
+
+    private val _adminBrowsingContent = MutableStateFlow(false)
+    val adminBrowsingContent: StateFlow<Boolean> = _adminBrowsingContent.asStateFlow()
+
+    fun setAdminBrowsingContent(browsing: Boolean) {
+        _adminBrowsingContent.value = browsing
+    }
+
+    fun observeReferralTransactionsForUser(referrerUid: String): Flow<List<ReferralTransaction>> {
+        return repository.observeReferralTransactionsForUser(referrerUid)
+    }
+
+    fun observePaidReferralTransactions(): Flow<List<ReferralTransaction>> {
+        return repository.observePaidReferralTransactions()
+    }
+
+    fun observeApprovedAccessRequestsForUser(uid: String): Flow<List<AccessRequest>> {
+        return repository.observeApprovedAccessRequestsForUser(uid)
+    }
+
+    fun observeNotifications(uid: String): Flow<List<NotificationItem>> {
+        return repository.observeNotifications(uid)
+    }
+
+    fun markNotificationRead(uid: String, notificationId: String) {
+        viewModelScope.launch {
+            repository.markNotificationRead(uid, notificationId)
+        }
+    }
+
 
 
     init {
@@ -726,6 +770,30 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             try {
                 repository.markReferralTransactionPaid(transactionId)
+                refreshAdminStats()
+                onDone(true)
+            } catch (e: Exception) {
+                onDone(false)
+            }
+        }
+    }
+
+    fun observeRecentAccessRequests(limit: Int = 5): Flow<List<AccessRequest>> {
+        return repository.observeAllAccessRequests().map { list ->
+            list.sortedByDescending { it.createdAt }.take(limit)
+        }
+    }
+
+    fun broadcastAlert(title: String, message: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.broadcastNotification(title, message)
+                NotificationHelper.showNotification(
+                    context = getApplication(),
+                    channelId = NotificationHelper.CHANNEL_DEFAULT,
+                    title = "Broadcast Alert: $title",
+                    body = message
+                )
                 refreshAdminStats()
                 onDone(true)
             } catch (e: Exception) {

@@ -1184,6 +1184,39 @@ class MedBankRepository(
         awaitClose { reg.remove() }
     }
 
+    fun observeAllResults(): Flow<List<ExamResult>> = callbackFlow {
+        val ref = firestore.collection("results").orderBy("submittedAt")
+        val reg = ref.addSnapshotListener { snapshot, _ ->
+            val list = snapshot?.documents?.mapNotNull { d ->
+                val answersRaw = (d.get("answers") as? List<*>)?.mapNotNull { item ->
+                    if (item is Map<*, *>) {
+                        StudentAnswer(
+                            qid = item["qid"]?.toString() ?: "",
+                            selectedIndex = (item["selectedIndex"] as? Number)?.toInt() ?: -1
+                        )
+                    } else null
+                } ?: emptyList()
+
+                ExamResult(
+                    id = d.id,
+                    uid = d.getString("uid") ?: "",
+                    examId = d.getString("examId") ?: "",
+                    examTitle = d.getString("examTitle") ?: "",
+                    score = d.getDouble("score") ?: 0.0,
+                    totalMarks = (d.getLong("totalMarks")?.toDouble()) ?: 100.0,
+                    correctCount = d.getLong("correct")?.toInt() ?: 0,
+                    wrongCount = d.getLong("wrong")?.toInt() ?: 0,
+                    skippedCount = d.getLong("skipped")?.toInt() ?: 0,
+                    answers = answersRaw,
+                    attemptNumber = d.getLong("attemptNumber")?.toInt() ?: 1,
+                    submittedAt = d.getTimestamp("submittedAt")?.toDate()?.time ?: System.currentTimeMillis()
+                )
+            } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
     suspend fun getResultById(resultId: String): ExamResult? {
         val it = dao.getResultById(resultId) ?: return null
         return ExamResult(
@@ -1596,6 +1629,131 @@ class MedBankRepository(
         }
     }
 
+    fun observeReferralTransactionsForUser(referrerUid: String): Flow<List<ReferralTransaction>> = callbackFlow {
+        val ref = firestore.collection("referralTransactions")
+            .whereEqualTo("referrerUid", referrerUid)
+        val reg = ref.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+            val list = snapshot?.documents?.mapNotNull { d ->
+                ReferralTransaction(
+                    id = d.id,
+                    referrerUid = d.getString("referrerUid") ?: "",
+                    referrerName = d.getString("referrerName") ?: "",
+                    referredUid = d.getString("referredUid") ?: "",
+                    referredName = d.getString("referredName") ?: "Student",
+                    planName = d.getString("planName") ?: "Standard Pass",
+                    amountPaid = d.getDouble("amountPaid") ?: (d.getLong("amountPaid")?.toDouble() ?: 0.0),
+                    commissionAmount = d.getDouble("commissionAmount") ?: (d.getLong("commissionAmount")?.toDouble() ?: 0.0),
+                    status = d.getString("status") ?: "pending",
+                    createdAt = d.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
+                    paidAt = d.getTimestamp("paidAt")?.toDate()?.time
+                )
+            }?.sortedByDescending { it.createdAt } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    fun observePaidReferralTransactions(): Flow<List<ReferralTransaction>> = callbackFlow {
+        val ref = firestore.collection("referralTransactions")
+            .whereEqualTo("status", "paid")
+        val reg = ref.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+            val list = snapshot?.documents?.mapNotNull { d ->
+                ReferralTransaction(
+                    id = d.id,
+                    referrerUid = d.getString("referrerUid") ?: "",
+                    referrerName = d.getString("referrerName") ?: "",
+                    referredUid = d.getString("referredUid") ?: "",
+                    referredName = d.getString("referredName") ?: "Student",
+                    planName = d.getString("planName") ?: "Standard Pass",
+                    amountPaid = d.getDouble("amountPaid") ?: (d.getLong("amountPaid")?.toDouble() ?: 0.0),
+                    commissionAmount = d.getDouble("commissionAmount") ?: (d.getLong("commissionAmount")?.toDouble() ?: 0.0),
+                    status = d.getString("status") ?: "paid",
+                    createdAt = d.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
+                    paidAt = d.getTimestamp("paidAt")?.toDate()?.time
+                )
+            }?.sortedByDescending { it.paidAt ?: it.createdAt } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    fun observeApprovedAccessRequestsForUser(uid: String): Flow<List<AccessRequest>> = callbackFlow {
+        val ref = firestore.collection("accessRequests")
+            .whereEqualTo("uid", uid)
+            .whereEqualTo("status", "approved")
+        val reg = ref.addSnapshotListener { snapshot, _ ->
+            val list = snapshot?.documents?.mapNotNull { d ->
+                AccessRequest(
+                    id = d.id,
+                    uid = d.getString("uid") ?: "",
+                    studentName = d.getString("studentName") ?: "",
+                    cnic = d.getString("cnic") ?: "",
+                    scopeType = d.getString("scopeType") ?: "",
+                    scopeId = d.getString("scopeId") ?: "",
+                    planId = d.getString("planId") ?: "",
+                    planName = d.getString("planName") ?: "",
+                    status = d.getString("status") ?: "approved",
+                    createdAt = d.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
+                    approvedAt = d.getTimestamp("approvedAt")?.toDate()?.time
+                )
+            } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    fun observeNotifications(uid: String): Flow<List<NotificationItem>> = callbackFlow {
+        val ref = firestore.collection("users").document(uid).collection("notifications")
+        val reg = ref.addSnapshotListener { snapshot, _ ->
+            val list = snapshot?.documents?.mapNotNull { d ->
+                NotificationItem(
+                    id = d.id,
+                    title = d.getString("title") ?: "",
+                    body = d.getString("body") ?: "",
+                    type = d.getString("type") ?: "general",
+                    isRead = d.getBoolean("isRead") ?: false,
+                    createdAt = d.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis()
+                )
+            }?.sortedByDescending { it.createdAt } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun markNotificationRead(uid: String, notificationId: String) {
+        try {
+            firestore.collection("users").document(uid).collection("notifications").document(notificationId)
+                .update("isRead", true).await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed marking notification read: ${e.message}")
+        }
+    }
+
+    suspend fun sendNotificationToUser(uid: String, title: String, body: String, type: String) {
+        try {
+            val notifId = UUID.randomUUID().toString()
+            val data = mapOf(
+                "title" to title,
+                "body" to body,
+                "type" to type,
+                "isRead" to false,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            firestore.collection("users").document(uid).collection("notifications").document(notifId).set(data).await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed sending notification to user: ${e.message}")
+        }
+    }
+
+
     suspend fun getUserNameByUid(uid: String): String {
         return try {
             val doc = firestore.collection("users").document(uid).get().await()
@@ -1976,17 +2134,42 @@ class MedBankRepository(
             firestore.collection("membershipPlans").whereEqualTo("isActive", true).get().await().size()
         } catch (_: Exception) { dao.getActivePlanCount() }
 
+        val activeSubscriptions = try {
+            val approvedSnap = firestore.collection("accessRequests").whereEqualTo("status", "approved").get().await()
+            approvedSnap.size()
+        } catch (_: Exception) {
+            dao.getActivePlanCount()
+        }
+
         val pendingPayouts = try {
             firestore.collection("referralTransactions").whereEqualTo("status", "pending").get().await().size()
         } catch (_: Exception) { 0 }
 
         return mapOf(
             "users" to userCount,
+            "totalStudents" to userCount,
             "pendingRequests" to pendingRequests,
             "publishedExams" to publishedExams,
             "activePlans" to activePlans,
+            "activeSubscriptions" to activeSubscriptions,
             "pendingPayouts" to pendingPayouts
         )
+    }
+
+    suspend fun broadcastNotification(title: String, message: String) {
+        try {
+            val data = mapOf(
+                "title" to title,
+                "message" to message,
+                "topic" to "medbank_announcements",
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            firestore.collection("broadcasts").add(data).await()
+            val settings = getSettings()
+            updateSettings(settings.adminWhatsapp, "$title: $message")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to broadcast notification: ${e.message}")
+        }
     }
 
     suspend fun getSubjectsByParent(parentType: String, parentId: String): List<Subject> {

@@ -30,16 +30,30 @@ import com.example.data.models.Exam
 import com.example.data.models.Subject
 import com.example.ui.MedBankViewModel
 import com.example.ui.components.*
+import com.example.ui.screens.admin.AdminDashboardScreen
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FolderTreeScreen(viewModel: MedBankViewModel) {
+    val currentUser by viewModel.currentUser.collectAsState()
+
+    val adminBrowsing by viewModel.adminBrowsingContent.collectAsState()
+
+    // If user is an Admin and NOT browsing content, render the dedicated Admin Dashboard
+    if (currentUser?.role == "admin" && !adminBrowsing) {
+        AdminDashboardScreen(viewModel = viewModel)
+        return
+    }
+
+    val notifications by viewModel.observeNotifications(currentUser?.uid ?: "").collectAsState(initial = emptyList())
+    val hasUnread = notifications.any { !it.isRead }
+
+
     val selectedProgramType by viewModel.selectedProgramType.collectAsState()
     val selectedParentId by viewModel.selectedParentId.collectAsState()
     val selectedParentName by viewModel.selectedParentName.collectAsState()
     val selectedSubject by viewModel.selectedSubject.collectAsState()
-    val currentUser by viewModel.currentUser.collectAsState()
     val appSettings by viewModel.appSettings.collectAsState()
 
     var showNotificationDialog by remember { mutableStateOf(false) }
@@ -103,6 +117,35 @@ fun FolderTreeScreen(viewModel: MedBankViewModel) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            if (currentUser?.role == "admin" && adminBrowsing) {
+                Surface(
+                    color = BrandBlue,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Admin Content Test Mode",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Button(
+                            onClick = { viewModel.setAdminBrowsingContent(false) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = BrandBlue),
+                            modifier = Modifier.testTag("exit_admin_browse_button")
+                        ) {
+                            Text("Exit to Dashboard", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+
             // ROOT LEVEL HOME HEADER
             if (selectedParentId == null && selectedSubject == null) {
                 Column(
@@ -142,7 +185,7 @@ fun FolderTreeScreen(viewModel: MedBankViewModel) {
 
                         // Circular notification bell
                         Surface(
-                            onClick = { showNotificationDialog = true },
+                            onClick = { viewModel.openProfileScreen("notifications_inbox") },
                             modifier = Modifier
                                 .size(44.dp)
                                 .testTag("home_notification_bell"),
@@ -158,14 +201,16 @@ fun FolderTreeScreen(viewModel: MedBankViewModel) {
                                     modifier = Modifier.size(22.dp)
                                 )
                                 // Red unread badge dot
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(BrandRed)
-                                        .align(Alignment.TopEnd)
-                                        .offset(x = (-10).dp, y = (10).dp)
-                                )
+                                if (hasUnread) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(BrandRed)
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = (-10).dp, y = (10).dp)
+                                    )
+                                }
                             }
                         }
                     }

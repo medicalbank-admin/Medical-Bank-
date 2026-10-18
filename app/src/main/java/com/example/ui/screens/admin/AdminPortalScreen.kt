@@ -59,7 +59,7 @@ enum class AdminSection {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminPortalScreen(viewModel: MedBankViewModel) {
-    var activeSection by remember { mutableStateOf(AdminSection.DASHBOARD) }
+    val activeSection by viewModel.activeAdminSection.collectAsState()
 
     // Requirement 11: Bulk Import has FLAG_SECURE
     if (activeSection == AdminSection.BULK_IMPORT) {
@@ -110,7 +110,7 @@ fun AdminPortalScreen(viewModel: MedBankViewModel) {
                 val isSel = activeSection == section
                 FilterChip(
                     selected = isSel,
-                    onClick = { activeSection = section },
+                    onClick = { viewModel.setActiveAdminSection(section) },
                     shape = CircleShape,
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = BrandBlue,
@@ -142,14 +142,14 @@ fun AdminPortalScreen(viewModel: MedBankViewModel) {
         // Selected Sub-View
         Box(modifier = Modifier.fillMaxSize()) {
             when (activeSection) {
-                AdminSection.DASHBOARD -> AdminDashboardView(viewModel = viewModel, onNavigate = { activeSection = it })
+                AdminSection.DASHBOARD -> AdminDashboardView(viewModel = viewModel, onNavigate = { viewModel.setActiveAdminSection(it) })
                 AdminSection.REQUESTS -> AdminRequestsView(viewModel = viewModel)
                 AdminSection.PAYOUTS -> AdminPayoutsScreen(viewModel = viewModel)
                 AdminSection.USERS -> AdminUsersView(viewModel = viewModel)
                 AdminSection.CONTENT -> AdminContentView(viewModel = viewModel)
                 AdminSection.BULK_IMPORT -> AdminBulkImportView(viewModel = viewModel)
                 AdminSection.PLANS -> AdminPlansView(viewModel = viewModel)
-                AdminSection.LEGAL -> LegalContentScreen(viewModel = viewModel, onBack = { activeSection = AdminSection.DASHBOARD })
+                AdminSection.LEGAL -> LegalContentScreen(viewModel = viewModel, onBack = { viewModel.setActiveAdminSection(AdminSection.DASHBOARD) })
                 AdminSection.SETTINGS -> AdminSettingsView(viewModel = viewModel)
             }
         }

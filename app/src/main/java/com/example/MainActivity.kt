@@ -57,6 +57,15 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         NotificationHelper.createNotificationChannels(this)
 
+        // CRITICAL: Check Remember Me on app launch. If logged in via Firebase but Remember Me is false, force sign out.
+        if (FirebaseAuth.getInstance().currentUser != null) {
+            val rememberMe = com.example.util.PreferenceManager.getRememberMe(this)
+            if (!rememberMe) {
+                FirebaseAuth.getInstance().signOut()
+                com.example.util.PreferenceManager.clearRememberMe(this)
+            }
+        }
+
         // Request notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {

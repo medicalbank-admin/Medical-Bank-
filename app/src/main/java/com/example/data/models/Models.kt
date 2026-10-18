@@ -216,4 +216,14 @@ data class RegistrationResult(
     val invalidReferralCodeEntered: Boolean = false
 )
 
+data class NotificationItem(
+    val id: String = "",
+    val title: String = "",
+    val body: String = "",
+    val type: String = "general", // "referral", "exam", "general"
+    val isRead: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+
 

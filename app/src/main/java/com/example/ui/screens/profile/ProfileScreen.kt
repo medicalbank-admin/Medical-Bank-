@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.models.User
+import com.example.ui.screens.admin.AdminSection
 import com.example.ui.MedBankViewModel
 import com.example.ui.components.MedBankCard
 import com.example.ui.components.MedBankChip
@@ -39,6 +41,12 @@ fun ProfileScreen(viewModel: MedBankViewModel) {
         ) {
             Text("No user signed in.", color = TextSecondary)
         }
+        return
+    }
+
+    // Dynamic Admin Profile Screen
+    if (user.role == "admin") {
+        AdminProfileContent(viewModel = viewModel, user = user)
         return
     }
 
@@ -300,3 +308,266 @@ fun ProfileScreen(viewModel: MedBankViewModel) {
         )
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdminProfileContent(viewModel: MedBankViewModel, user: User) {
+    var showLogoutConfirmation by remember { mutableStateOf(false) }
+
+    Scaffold(
+        containerColor = AppBackground,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Admin Control Panel",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = CardSurface
+                )
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // =================================================================
+            // 2. ADMIN IDENTITY CARD
+            // =================================================================
+            MedBankCard(
+                padding = 20.dp,
+                modifier = Modifier.testTag("admin_profile_identity_card")
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(BrandBlue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = user.fullName.split(" ")
+                                .mapNotNull { it.firstOrNull()?.toString() }
+                                .take(2)
+                                .joinToString("")
+                                .uppercase()
+                                .ifBlank { "AD" },
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 24.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = user.fullName.ifBlank { "Administrator" },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "CNIC: ${user.cnic.ifBlank { "ADMIN-SECURE" }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        MedBankChip(
+                            text = "SUPER ADMIN",
+                            color = BrandRed,
+                            bgColor = BrandRedPastel,
+                            icon = Icons.Default.Shield
+                        )
+                    }
+                }
+            }
+
+            // =================================================================
+            // 3. MANAGEMENT MENU (MedBankCard with MedBankListItem)
+            // =================================================================
+            Text(
+                text = "Portal Administration",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = TextSecondary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
+            )
+
+            MedBankCard(
+                padding = 8.dp,
+                modifier = Modifier.testTag("admin_profile_management_menu")
+            ) {
+                // User Management (Search, view, and reset devices for students)
+                MedBankListItem(
+                    title = "User Management",
+                    subtitle = "Search, view, and reset devices for students",
+                    icon = Icons.Default.ManageAccounts,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.navigateToAdminSection(AdminSection.USERS) },
+                    modifier = Modifier.testTag("admin_menu_users")
+                )
+
+                // Content Manager (Programs, Years, Subjects, Exams)
+                MedBankListItem(
+                    title = "Content Manager",
+                    subtitle = "Programs, Years, Subjects, Exams",
+                    icon = Icons.Default.FolderOpen,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.navigateToAdminSection(AdminSection.CONTENT) },
+                    modifier = Modifier.testTag("admin_menu_content")
+                )
+
+                // Membership Plans (Create and edit plans)
+                MedBankListItem(
+                    title = "Membership Plans",
+                    subtitle = "Create and edit plans",
+                    icon = Icons.Default.CardMembership,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.navigateToAdminSection(AdminSection.PLANS) },
+                    modifier = Modifier.testTag("admin_menu_plans")
+                )
+
+                // Referral Payouts (Approve and mark paid)
+                MedBankListItem(
+                    title = "Referral Payouts",
+                    subtitle = "Approve and mark paid",
+                    icon = Icons.Default.Paid,
+                    iconColor = BrandSuccess,
+                    iconBgColor = BrandSuccessPastel,
+                    onClick = { viewModel.navigateToAdminSection(AdminSection.PAYOUTS) },
+                    modifier = Modifier.testTag("admin_menu_payouts")
+                )
+
+                // Legal Content Editor (Edit Privacy/Terms)
+                MedBankListItem(
+                    title = "Legal Content Editor",
+                    subtitle = "Edit Privacy/Terms",
+                    icon = Icons.Default.Gavel,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.navigateToAdminSection(AdminSection.LEGAL) },
+                    modifier = Modifier.testTag("admin_menu_legal")
+                )
+
+                // System Settings (WhatsApp number, etc.)
+                MedBankListItem(
+                    title = "System Settings",
+                    subtitle = "WhatsApp number, etc.",
+                    icon = Icons.Default.Settings,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    showDivider = false,
+                    onClick = { viewModel.navigateToAdminSection(AdminSection.SETTINGS) },
+                    modifier = Modifier.testTag("admin_menu_settings")
+                )
+            }
+
+            // =================================================================
+            // 4. ACCOUNT MENU (MedBankCard with Account Details & Sign Out)
+            // =================================================================
+            Text(
+                text = "Account & Session",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = TextSecondary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
+            )
+
+            MedBankCard(
+                padding = 8.dp,
+                modifier = Modifier.testTag("admin_profile_account_menu")
+            ) {
+                // Account Details
+                MedBankListItem(
+                    title = "Account Details",
+                    subtitle = "View admin profile credentials & security info",
+                    icon = Icons.Default.Person,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.openProfileScreen("account") },
+                    modifier = Modifier.testTag("admin_menu_account_details")
+                )
+
+                // Sign Out (with red icon)
+                MedBankListItem(
+                    title = "Sign Out",
+                    subtitle = "Exit administrative session",
+                    icon = Icons.AutoMirrored.Filled.Logout,
+                    iconColor = BrandRed,
+                    iconBgColor = BrandRedPastel,
+                    showDivider = false,
+                    onClick = { showLogoutConfirmation = true },
+                    modifier = Modifier.testTag("admin_menu_sign_out")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+
+    if (showLogoutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmation = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                    contentDescription = null,
+                    tint = BrandRed
+                )
+            },
+            title = {
+                Text(
+                    text = "Sign Out Administrator?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to end your administrator session? You will need to log in again to access the portal.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutConfirmation = false
+                        viewModel.logout()
+                    },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandRed)
+                ) {
+                    Text("Sign Out")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirmation = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
+    }
+}
+

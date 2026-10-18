@@ -49,6 +49,7 @@ fun MainShell(viewModel: MedBankViewModel) {
                 "help" -> HelpSupportScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
                 "tutorial" -> AppTutorialScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
                 "notifications" -> NotificationPreferencesScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
+                "notifications_inbox" -> NotificationsScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
                 "device" -> DeviceBindingScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
                 "analytics" -> StudentAnalyticsScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
                 "membership" -> MembershipScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
@@ -88,15 +89,25 @@ fun MainShell(viewModel: MedBankViewModel) {
                 contentColor = MaterialTheme.colorScheme.onSurface,
                 windowInsets = WindowInsets.navigationBars
             ) {
-                // Tab 0: Explorer
+                // Tab 0: Home / Dashboard (Shows Admin Dashboard for admin, Banks for student)
                 NavigationBarItem(
                     selected = activeTab == ScreenTab.EXPLORER,
                     onClick = { 
                         viewModel.setActiveTab(ScreenTab.EXPLORER)
                         viewModel.resetExplorerNavigation()
                     },
-                    icon = { Icon(Icons.Default.Folder, contentDescription = "Question Banks") },
-                    label = { Text("Banks", fontWeight = if (activeTab == ScreenTab.EXPLORER) FontWeight.Bold else FontWeight.Normal) },
+                    icon = { 
+                        Icon(
+                            imageVector = if (isAdmin) Icons.Default.Dashboard else Icons.Default.Folder, 
+                            contentDescription = if (isAdmin) "Dashboard" else "Question Banks"
+                        ) 
+                    },
+                    label = { 
+                        Text(
+                            text = if (isAdmin) "Dashboard" else "Banks", 
+                            fontWeight = if (activeTab == ScreenTab.EXPLORER) FontWeight.Bold else FontWeight.Normal
+                        ) 
+                    },
                     colors = navItemColors,
                     modifier = Modifier.testTag("nav_tab_explorer")
                 )

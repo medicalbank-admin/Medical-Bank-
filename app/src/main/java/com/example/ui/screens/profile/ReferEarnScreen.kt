@@ -51,6 +51,7 @@ fun ReferEarnScreen(
     val currentUser by viewModel.currentUser.collectAsState()
     val user = currentUser
     val referrals by viewModel.observeReferralsForCurrentUser().collectAsState(initial = emptyList())
+    val payoutTransactions by viewModel.observeReferralTransactionsForUser(currentUser?.uid ?: "").collectAsState(initial = emptyList())
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -386,53 +387,76 @@ fun ReferEarnScreen(
                         }
                     }
                 }
-            } else {
+             } else {
                 items(referrals, key = { it.uid }) { referredUser ->
+                    ReferredUserCard(referredUser = referredUser, viewModel = viewModel, dateFormat = dateFormat)
+                }
+            }
+
+            // 4. BOTTOM SECTION — "Payout History"
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Payout History",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+            }
+
+            if (payoutTransactions.isEmpty()) {
+                item {
+                    MedBankCard(
+                        padding = 16.dp,
+                        modifier = Modifier.testTag("empty_payout_history")
+                    ) {
+                        Text(
+                            text = "No payout history yet. Commissions from referred subscriptions will appear here.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                }
+            } else {
+                items(payoutTransactions, key = { it.id }) { tx ->
+                    val isPaid = tx.status == "paid"
                     MedBankCard(
                         padding = 14.dp,
-                        modifier = Modifier.testTag("referred_user_${referredUser.uid}")
+                        modifier = Modifier.testTag("payout_tx_${tx.id}")
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(CircleShape)
-                                    .background(BrandBluePastel),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = referredUser.fullName.firstOrNull()?.toString()?.uppercase() ?: "U",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp,
-                                    color = BrandBlue
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(14.dp))
-
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = referredUser.fullName,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
+                                    text = "Referred: ${tx.referredName.ifBlank { "Student" }} (${tx.planName})",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
                                     color = TextPrimary
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Joined ${dateFormat.format(Date(referredUser.createdAt))}",
+                                    text = dateFormat.format(Date(tx.createdAt)),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSecondary
                                 )
                             }
-
-                            MedBankChip(
-                                text = "REGISTERED",
-                                color = BrandSuccess,
-                                bgColor = BrandSuccessPastel
-                            )
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "PKR ${tx.commissionAmount.toInt()}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = BrandSuccess
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                MedBankChip(
+                                    text = if (isPaid) "PAID" else "PENDING",
+                                    color = if (isPaid) BrandSuccess else AmberWarning,
+                                    bgColor = if (isPaid) BrandSuccessPastel else AmberWarningPastel
+                                )
+                            }
                         }
                     }
                 }
@@ -444,3 +468,68 @@ fun ReferEarnScreen(
         }
     }
 }
+
+@Composable
+fun ReferredUserCard(referredUser: User, viewModel: MedBankViewModel, dateFormat: SimpleDateFormat) {
+    val approvedRequests by viewModel.observeApprovedAccessRequestsForUser(referredUser.uid).collectAsState(initial = emptyList())
+    val hasPaid = approvedRequests.isNotEmpty()
+    val planName = approvedRequests.firstOrNull()?.planName ?: ""
+
+    MedBankCard(
+        padding = 14.dp,
+        modifier = Modifier.testTag("referred_user_${referredUser.uid}")
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(BrandBluePastel),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = referredUser.fullName.firstOrNull()?.toString()?.uppercase() ?: "U",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = BrandBlue
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = referredUser.fullName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (hasPaid) "Purchased: $planName" else "Joined ${dateFormat.format(Date(referredUser.createdAt))}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (hasPaid) BrandSuccess else TextSecondary,
+                    fontWeight = if (hasPaid) FontWeight.SemiBold else FontWeight.Normal
+                )
+            }
+
+            if (hasPaid) {
+                MedBankChip(
+                    text = "PAID",
+                    color = BrandSuccess,
+                    bgColor = BrandSuccessPastel
+                )
+            } else {
+                MedBankChip(
+                    text = "REGISTERED (UNPAID)",
+                    color = TextSecondary,
+                    bgColor = AppBackground
+                )
+            }
+        }
+    }
+}
+

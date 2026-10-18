@@ -2,7 +2,7 @@ package com.example.ui.screens.auth
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -257,10 +257,39 @@ fun AuthScreen(viewModel: MedBankViewModel) {
 
                         Spacer(modifier = Modifier.height(6.dp))
 
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        var rememberMe by remember {
+                            mutableStateOf(com.example.util.PreferenceManager.getRememberMe(context))
+                        }
+
+                        // Pre-fill loginCnic if rememberMe was true on initial composition
+                        LaunchedEffect(Unit) {
+                            if (rememberMe) {
+                                val savedCnic = com.example.util.PreferenceManager.getSavedCnic(context)
+                                if (savedCnic.length == 13 && loginCnic.isBlank()) {
+                                    loginCnic = savedCnic
+                                }
+                            }
+                        }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable { rememberMe = !rememberMe }
+                            ) {
+                                Checkbox(
+                                    checked = rememberMe,
+                                    onCheckedChange = { rememberMe = it },
+                                    colors = CheckboxDefaults.colors(checkedColor = BrandBlue),
+                                    modifier = Modifier.testTag("remember_me_checkbox")
+                                )
+                                Text("Remember Me", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                            }
+
                             TextButton(
                                 onClick = { showForgotPasswordDialog = true },
                                 modifier = Modifier.testTag("forgot_password_button")
@@ -275,6 +304,7 @@ fun AuthScreen(viewModel: MedBankViewModel) {
                         MedBankPillButton(
                             text = "Sign In",
                             onClick = {
+                                com.example.util.PreferenceManager.saveRememberMe(context, rememberMe, loginCnic)
                                 viewModel.login(loginCnic, loginPassword)
                             },
                             enabled = loginCnic.length == 13 && loginPassword.isNotBlank(),
