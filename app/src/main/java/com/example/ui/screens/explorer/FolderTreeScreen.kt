@@ -184,33 +184,58 @@ fun FolderTreeScreen(viewModel: MedBankViewModel) {
                             }
                         }
 
-                        // Circular notification bell
-                        Surface(
-                            onClick = { viewModel.openProfileScreen("notifications_inbox") },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .testTag("home_notification_bell"),
-                            shape = CircleShape,
-                            color = CardSurface,
-                            shadowElevation = 2.dp
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Notifications,
-                                    contentDescription = "Notifications",
-                                    tint = BrandBlue,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                // Red unread badge dot
-                                if (hasUnread) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(BrandRed)
-                                            .align(Alignment.TopEnd)
-                                            .offset(x = (-10).dp, y = (10).dp)
+                            // Help Desk / Support button
+                            Surface(
+                                onClick = { viewModel.openProfileScreen("help") },
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .testTag("home_help_desk_btn"),
+                                shape = CircleShape,
+                                color = BrandBluePastel.copy(alpha = 0.6f),
+                                shadowElevation = 1.dp
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.SupportAgent,
+                                        contentDescription = "Help Desk",
+                                        tint = BrandBlue,
+                                        modifier = Modifier.size(22.dp)
                                     )
+                                }
+                            }
+
+                            // Circular notification bell
+                            Surface(
+                                onClick = { viewModel.openProfileScreen("notifications_inbox") },
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .testTag("home_notification_bell"),
+                                shape = CircleShape,
+                                color = CardSurface,
+                                shadowElevation = 2.dp
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Notifications,
+                                        contentDescription = "Notifications",
+                                        tint = BrandBlue,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    // Red unread badge dot
+                                    if (hasUnread) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(BrandRed)
+                                                .align(Alignment.TopEnd)
+                                                .offset(x = (-10).dp, y = (10).dp)
+                                        )
+                                    }
                                 }
                             }
                         }

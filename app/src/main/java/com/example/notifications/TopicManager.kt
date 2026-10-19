@@ -30,7 +30,8 @@ object TopicManager {
             }
         }
 
-        // Also general announcements topic
+        // Global broadcast and general announcements topics
+        topicsToSubscribe.add("all_students")
         topicsToSubscribe.add("medbank_announcements")
 
         for (topic in topicsToSubscribe) {

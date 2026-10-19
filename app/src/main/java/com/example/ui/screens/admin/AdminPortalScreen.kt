@@ -52,6 +52,7 @@ enum class AdminSection {
     CONTENT,
     BULK_IMPORT,
     PLANS,
+    BILLING_ACCOUNTS,
     BANNER_CONTROL,
     LEGAL,
     SETTINGS
@@ -129,6 +130,7 @@ fun AdminPortalScreen(viewModel: MedBankViewModel) {
                                 AdminSection.CONTENT -> "Content Hierarchy"
                                 AdminSection.BULK_IMPORT -> "Bulk Import"
                                 AdminSection.PLANS -> "Plans & Passes"
+                                AdminSection.BILLING_ACCOUNTS -> "Billing Accounts"
                                 AdminSection.BANNER_CONTROL -> "Banner Control"
                                 AdminSection.LEGAL -> "Legal Content"
                                 AdminSection.SETTINGS -> "App Config"
@@ -151,6 +153,7 @@ fun AdminPortalScreen(viewModel: MedBankViewModel) {
                 AdminSection.CONTENT -> AdminContentView(viewModel = viewModel)
                 AdminSection.BULK_IMPORT -> AdminBulkImportView(viewModel = viewModel)
                 AdminSection.PLANS -> AdminPlansView(viewModel = viewModel)
+                AdminSection.BILLING_ACCOUNTS -> AdminBillingScreen(viewModel = viewModel, onBack = { viewModel.setActiveAdminSection(AdminSection.DASHBOARD) })
                 AdminSection.BANNER_CONTROL -> AdminBannerScreen(viewModel = viewModel)
                 AdminSection.LEGAL -> LegalContentScreen(viewModel = viewModel, onBack = { viewModel.setActiveAdminSection(AdminSection.DASHBOARD) })
                 AdminSection.SETTINGS -> AdminSettingsView(viewModel = viewModel)
@@ -320,6 +323,15 @@ fun AdminDashboardView(viewModel: MedBankViewModel, onNavigate: (AdminSection) -
                 iconBgColor = BrandBluePastel,
                 onClick = { onNavigate(AdminSection.BULK_IMPORT) },
                 modifier = Modifier.testTag("admin_nav_bulk_import")
+            )
+            MedBankListItem(
+                title = "Billing Accounts",
+                subtitle = "Manage bank accounts, JazzCash, Easypaisa & payment details",
+                icon = Icons.Default.AccountBalance,
+                iconColor = BrandBlue,
+                iconBgColor = BrandBluePastel,
+                onClick = { onNavigate(AdminSection.BILLING_ACCOUNTS) },
+                modifier = Modifier.testTag("admin_nav_billing")
             )
             MedBankListItem(
                 title = "Legal Content",
@@ -1550,16 +1562,27 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminPlansView(viewModel: MedBankViewModel) {
     val coroutineScope = rememberCoroutineScope()
     val plans by viewModel.repository.observeAllPlans().collectAsState(initial = emptyList())
 
     var showAddDialog by remember { mutableStateOf(false) }
+    var planToEdit by remember { mutableStateOf<MembershipPlan?>(null) }
+
     var planName by remember { mutableStateOf("") }
     var planPrice by remember { mutableStateOf("49.99") }
     var planDuration by remember { mutableStateOf("30") }
     var planCurrency by remember { mutableStateOf("USD") }
+
+    // Track: [ MBBS ] or [ Licensing Exams ]
+    var selectedTrack by remember { mutableStateOf("mbbs") } // "mbbs" or "licensing"
+    var selectedMbbsYear by remember { mutableStateOf("Year 1") }
+    var selectedLicensingPathway by remember { mutableStateOf("NRE") }
+
+    val mbbsYearsList = listOf("Year 1", "Year 2", "Year 3", "Year 4", "Year 5", "Year 6")
+    val licensingPathwaysList = listOf("NRE", "FCPS", "USMLE", "PLAB", "DHA", "SMLE")
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -1567,14 +1590,32 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Membership Plans", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Column {
+                Text("Membership Plans", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Configure track-specific plans for students",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
             Button(
-                onClick = { showAddDialog = true },
+                onClick = {
+                    planToEdit = null
+                    planName = ""
+                    planPrice = "49.99"
+                    planDuration = "30"
+                    planCurrency = "USD"
+                    selectedTrack = "mbbs"
+                    selectedMbbsYear = "Year 1"
+                    selectedLicensingPathway = "NRE"
+                    showAddDialog = true
+                },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.testTag("admin_add_plan_button")
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
@@ -1588,18 +1629,21 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
             EmptyPlaceholder(
                 icon = Icons.Default.CardMembership,
                 title = "No Membership Plans",
-                subtitle = "Create access plans (e.g. USMLE 30-Day Pass or MBBS Annual Access).",
-                actionLabel = "Create Default Plan",
+                subtitle = "Create access plans assigned explicitly to MBBS Years or Licensing Pathways.",
+                actionLabel = "Create Default MBBS Plan",
                 onActionClick = {
                     coroutineScope.launch {
                         viewModel.repository.savePlan(
                             MembershipPlan(
-                                id = "plan_standard",
-                                name = "Standard Clinical Pass",
+                                id = "plan_mbbs_year_1_standard",
+                                name = "MBBS Year 1 Full Pass",
                                 price = 39.99,
                                 currency = "USD",
                                 durationDays = 30,
-                                scopeType = "all",
+                                scopeType = "mbbs",
+                                mbbsYear = "Year 1",
+                                scopeMbbsYear = "Year 1",
+                                scopeProgramType = "mbbs",
                                 features = listOf("Full explanations", "Unlimited retakes", "Negative marking mock")
                             )
                         )
@@ -1609,22 +1653,74 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(plans) { p ->
-                    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth().testTag("plan_item_${p.id}"),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Text(p.name, fontWeight = FontWeight.Bold)
-                                Text("${p.currency} ${p.price} • ${p.durationDays} Days", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                                Text("Scope: ${p.scopeType.uppercase()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(p.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    "${p.currency} ${p.price} • ${p.durationDays} Days",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                val trackLabel = if (p.scopeType.equals("mbbs", ignoreCase = true)) {
+                                    val yr = p.mbbsYear.ifBlank { p.scopeMbbsYear }.ifBlank { "All Years" }
+                                    "MBBS: $yr"
+                                } else if (p.scopeType.equals("licensing", ignoreCase = true)) {
+                                    val pw = p.licensingPathway.ifBlank { p.scopeLicensingPathway }.ifBlank { "All Pathways" }
+                                    "Licensing: $pw"
+                                } else {
+                                    "Scope: ${p.scopeType.uppercase()}"
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                                ) {
+                                    Text(
+                                        text = trackLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
 
-                            IconButton(onClick = {
-                                coroutineScope.launch { viewModel.repository.deletePlan(p.id) }
-                            }) {
-                                Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = {
+                                        planToEdit = p
+                                        planName = p.name
+                                        planPrice = p.price.toString()
+                                        planCurrency = p.currency
+                                        planDuration = p.durationDays.toString()
+                                        selectedTrack = if (p.scopeType.equals("licensing", ignoreCase = true)) "licensing" else "mbbs"
+                                        selectedMbbsYear = p.mbbsYear.ifBlank { p.scopeMbbsYear }.ifBlank { "Year 1" }
+                                        selectedLicensingPathway = p.licensingPathway.ifBlank { p.scopeLicensingPathway }.ifBlank { "NRE" }
+                                        showAddDialog = true
+                                    },
+                                    modifier = Modifier.testTag("edit_plan_${p.id}")
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit Plan", tint = MaterialTheme.colorScheme.primary)
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch { viewModel.repository.deletePlan(p.id) }
+                                    },
+                                    modifier = Modifier.testTag("delete_plan_${p.id}")
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete Plan", tint = MaterialTheme.colorScheme.error)
+                                }
                             }
                         }
                     }
@@ -1634,42 +1730,211 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
     }
 
     if (showAddDialog) {
+        var trackDropdownExpanded by remember { mutableStateOf(false) }
+        var yearDropdownExpanded by remember { mutableStateOf(false) }
+        var pathwayDropdownExpanded by remember { mutableStateOf(false) }
+
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("Create Membership Plan") },
+            title = {
+                Text(
+                    text = if (planToEdit != null) "Edit Membership Plan" else "Create Membership Plan",
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = planName, onValueChange = { planName = it }, label = { Text("Plan Name") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = planPrice, onValueChange = { planPrice = it }, label = { Text("Price (e.g. 49.99)") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = planCurrency, onValueChange = { planCurrency = it }, label = { Text("Currency (USD/PKR/SAR)") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = planDuration, onValueChange = { planDuration = it }, label = { Text("Duration (Days)") }, modifier = Modifier.fillMaxWidth())
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = planName,
+                        onValueChange = { planName = it },
+                        label = { Text("Plan Name *") },
+                        placeholder = { Text(if (selectedTrack == "mbbs") "e.g. MBBS Year 1 Full Access" else "e.g. NRE 30-Day Question Bank") },
+                        modifier = Modifier.fillMaxWidth().testTag("plan_input_name")
+                    )
+
+                    // 1. Track: Dropdown or Segmented control with options [ MBBS ] or [ Licensing Exams ]
+                    Text("Track *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    ExposedDropdownMenuBox(
+                        expanded = trackDropdownExpanded,
+                        onExpandedChange = { trackDropdownExpanded = !trackDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth().testTag("plan_track_dropdown")
+                    ) {
+                        OutlinedTextField(
+                            value = if (selectedTrack == "mbbs") "MBBS" else "Licensing Exams",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Select Track") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = trackDropdownExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = trackDropdownExpanded,
+                            onDismissRequest = { trackDropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("MBBS") },
+                                onClick = {
+                                    selectedTrack = "mbbs"
+                                    trackDropdownExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Licensing Exams") },
+                                onClick = {
+                                    selectedTrack = "licensing"
+                                    trackDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+
+                    // 2. Conditional Field (MBBS): Select Year
+                    if (selectedTrack == "mbbs") {
+                        Text("Select Year *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        ExposedDropdownMenuBox(
+                            expanded = yearDropdownExpanded,
+                            onExpandedChange = { yearDropdownExpanded = !yearDropdownExpanded },
+                            modifier = Modifier.fillMaxWidth().testTag("plan_mbbs_year_dropdown")
+                        ) {
+                            OutlinedTextField(
+                                value = selectedMbbsYear,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("MBBS Year") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = yearDropdownExpanded) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = yearDropdownExpanded,
+                                onDismissRequest = { yearDropdownExpanded = false }
+                            ) {
+                                mbbsYearsList.forEach { yr ->
+                                    DropdownMenuItem(
+                                        text = { Text(yr) },
+                                        onClick = {
+                                            selectedMbbsYear = yr
+                                            yearDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. Conditional Field (Licensing): Select Pathway
+                    if (selectedTrack == "licensing") {
+                        Text("Select Pathway *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        ExposedDropdownMenuBox(
+                            expanded = pathwayDropdownExpanded,
+                            onExpandedChange = { pathwayDropdownExpanded = !pathwayDropdownExpanded },
+                            modifier = Modifier.fillMaxWidth().testTag("plan_licensing_pathway_dropdown")
+                        ) {
+                            OutlinedTextField(
+                                value = selectedLicensingPathway,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Licensing Pathway") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = pathwayDropdownExpanded) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = pathwayDropdownExpanded,
+                                onDismissRequest = { pathwayDropdownExpanded = false }
+                            ) {
+                                licensingPathwaysList.forEach { pw ->
+                                    DropdownMenuItem(
+                                        text = { Text(pw) },
+                                        onClick = {
+                                            selectedLicensingPathway = pw
+                                            pathwayDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = planPrice,
+                            onValueChange = { planPrice = it },
+                            label = { Text("Price") },
+                            modifier = Modifier.weight(1f).testTag("plan_input_price")
+                        )
+                        OutlinedTextField(
+                            value = planCurrency,
+                            onValueChange = { planCurrency = it },
+                            label = { Text("Currency") },
+                            modifier = Modifier.weight(1f).testTag("plan_input_currency")
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = planDuration,
+                        onValueChange = { planDuration = it },
+                        label = { Text("Duration (Days)") },
+                        modifier = Modifier.fillMaxWidth().testTag("plan_input_duration")
+                    )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        coroutineScope.launch {
-                            viewModel.repository.savePlan(
-                                MembershipPlan(
-                                    id = "plan_${UUID.randomUUID().toString().take(6)}",
-                                    name = planName,
+                        if (planName.isNotBlank()) {
+                            coroutineScope.launch {
+                                val planId = planToEdit?.id ?: "plan_${UUID.randomUUID().toString().take(6)}"
+                                val plan = MembershipPlan(
+                                    id = planId,
+                                    name = planName.trim(),
                                     price = planPrice.toDoubleOrNull() ?: 29.99,
-                                    currency = planCurrency,
+                                    currency = planCurrency.trim().ifBlank { "USD" },
                                     durationDays = planDuration.toIntOrNull() ?: 30,
-                                    scopeType = "all"
+                                    scopeType = selectedTrack,
+                                    mbbsYear = if (selectedTrack == "mbbs") selectedMbbsYear else "",
+                                    licensingPathway = if (selectedTrack == "licensing") selectedLicensingPathway else "",
+                                    scopeMbbsYear = if (selectedTrack == "mbbs") selectedMbbsYear else "",
+                                    scopeLicensingPathway = if (selectedTrack == "licensing") selectedLicensingPathway else "",
+                                    scopeProgramType = selectedTrack,
+                                    features = planToEdit?.features?.ifEmpty { null } ?: listOf(
+                                        "Full explanations & clinical rationales",
+                                        "Timed mock exams with negative marking",
+                                        "Unlimited practice attempts"
+                                    ),
+                                    isActive = true
                                 )
-                            )
-                            showAddDialog = false
-                            planName = ""
+                                viewModel.repository.savePlan(plan)
+                                showAddDialog = false
+                                planToEdit = null
+                                planName = ""
+                            }
                         }
                     },
+                    enabled = planName.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) { Text("Save Plan") }
+                    ),
+                    modifier = Modifier.testTag("plan_save_button")
+                ) {
+                    Text(if (planToEdit != null) "Update Plan" else "Save Plan")
+                }
             },
-            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = {
+                    showAddDialog = false
+                    planToEdit = null
+                }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }

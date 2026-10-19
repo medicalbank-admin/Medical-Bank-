@@ -54,6 +54,7 @@ fun MainShell(viewModel: MedBankViewModel) {
                 "analytics" -> StudentAnalyticsScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
                 "membership" -> MembershipScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
                 "refer_earn" -> ReferEarnScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
+                "billing_accounts" -> BillingAccountsScreen(viewModel = viewModel, onBack = { viewModel.openProfileScreen(null) })
                 else -> ProfileScreen(viewModel = viewModel)
             }
             return

@@ -1785,76 +1785,91 @@ class MedBankRepository(
 
     suspend fun getPlansForExamTrack(parentType: String, parentId: String): List<MembershipPlan> {
         return try {
+            val isMbbs = parentType.equals("mbbsYear", ignoreCase = true) || parentType.equals("mbbs", ignoreCase = true)
+            val scopeType = if (isMbbs) "mbbs" else "licensing"
+            val fieldName = if (isMbbs) "mbbsYear" else "licensingPathway"
+
+            // 1. Direct query matching active plans by scopeType and fieldName as specified
             val snap = firestore.collection("membershipPlans")
                 .whereEqualTo("isActive", true)
+                .whereEqualTo("scopeType", scopeType)
+                .whereEqualTo(fieldName, parentId)
                 .get()
                 .await()
-            val allPlans = snap.documents.mapNotNull { firestoreDocToPlan(it) }
-            val matching = allPlans.filter { plan ->
-                val matchesProgram = plan.scopeProgramType.isBlank() || plan.scopeProgramType.equals(parentType, ignoreCase = true)
-                val matchesYear = plan.scopeMbbsYear.isBlank() || plan.scopeMbbsYear.equals(parentId, ignoreCase = true) || parentId.contains(plan.scopeMbbsYear, ignoreCase = true)
-                val matchesPathway = plan.scopeLicensingPathway.isBlank() || plan.scopeLicensingPathway.equals(parentId, ignoreCase = true) || parentId.contains(plan.scopeLicensingPathway, ignoreCase = true)
-                val matchesScopeType = plan.scopeType.equals("all", ignoreCase = true) || 
-                                       plan.scopeType.equals(parentType, ignoreCase = true) || 
-                                       plan.scopeIds.contains(parentId)
-                (matchesProgram && matchesYear && matchesPathway) || matchesScopeType
+
+            var plans = snap.documents.mapNotNull { firestoreDocToPlan(it) }
+
+            // 2. If no direct match, check formatting variants (e.g. "year_1" vs "Year 1" or "nre" vs "NRE")
+            if (plans.isEmpty()) {
+                val altId = if (isMbbs) {
+                    if (parentId.startsWith("year_", ignoreCase = true)) {
+                        "Year " + parentId.substringAfter("year_")
+                    } else if (parentId.startsWith("Year ", ignoreCase = true)) {
+                        "year_" + parentId.substringAfter("Year ")
+                    } else {
+                        "Year $parentId"
+                    }
+                } else {
+                    if (parentId == parentId.uppercase()) parentId.lowercase() else parentId.uppercase()
+                }
+
+                if (altId != parentId) {
+                    val altSnap = firestore.collection("membershipPlans")
+                        .whereEqualTo("isActive", true)
+                        .whereEqualTo("scopeType", scopeType)
+                        .whereEqualTo(fieldName, altId)
+                        .get()
+                        .await()
+                    plans = altSnap.documents.mapNotNull { firestoreDocToPlan(it) }
+                }
             }
-            if (matching.isNotEmpty()) {
-                matching
-            } else if (allPlans.isNotEmpty()) {
-                allPlans
-            } else {
-                listOf(
-                    MembershipPlan(
-                        id = "plan_${parentType}_30d",
-                        name = "${parentType.uppercase()} 30-Day Pass",
-                        price = 29.99,
-                        currency = "USD",
-                        durationDays = 30,
-                        scopeType = parentType,
-                        scopeProgramType = parentType,
-                        features = listOf("Full high-yield question explanations", "Timed mock mode with negative marking", "Unlimited access")
-                    ),
-                    MembershipPlan(
-                        id = "plan_${parentType}_90d",
-                        name = "${parentType.uppercase()} 90-Day Full Access",
-                        price = 59.99,
-                        currency = "USD",
-                        durationDays = 90,
-                        scopeType = parentType,
-                        scopeProgramType = parentType,
-                        features = listOf("Full high-yield question explanations", "Timed mock mode with negative marking", "Unlimited retakes", "Priority support")
-                    )
-                )
+
+            // 3. Strict fallback check within this scopeType only (case-insensitive/digit match)
+            if (plans.isEmpty()) {
+                val scopeSnap = firestore.collection("membershipPlans")
+                    .whereEqualTo("isActive", true)
+                    .whereEqualTo("scopeType", scopeType)
+                    .get()
+                    .await()
+                val scopePlans = scopeSnap.documents.mapNotNull { firestoreDocToPlan(it) }
+                plans = scopePlans.filter { plan ->
+                    if (isMbbs) {
+                        val py = plan.mbbsYear.ifBlank { plan.scopeMbbsYear }
+                        py.equals(parentId, ignoreCase = true) ||
+                            (py.filter { it.isDigit() }.isNotEmpty() &&
+                             py.filter { it.isDigit() } == parentId.filter { it.isDigit() })
+                    } else {
+                        val pp = plan.licensingPathway.ifBlank { plan.scopeLicensingPathway }
+                        pp.equals(parentId, ignoreCase = true)
+                    }
+                }
             }
+
+            // Strictly return only matching plans. Do NOT return fallback or unrelated plans!
+            plans
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching plans: ${e.message}")
-            listOf(
-                MembershipPlan(
-                    id = "plan_standard_30d",
-                    name = "Standard 30-Day Clinical Pass",
-                    price = 29.99,
-                    currency = "USD",
-                    durationDays = 30,
-                    scopeType = "all",
-                    features = listOf("Full explanations", "Timed mock mode", "Negative marking")
-                )
-            )
+            emptyList()
         }
     }
 
     private fun firestoreDocToPlan(d: com.google.firebase.firestore.DocumentSnapshot): MembershipPlan? {
         if (!d.exists()) return null
+        val mbbsYear = d.getString("mbbsYear") ?: d.getString("scopeMbbsYear") ?: ""
+        val licensingPathway = d.getString("licensingPathway") ?: d.getString("scopeLicensingPathway") ?: ""
+        val scopeType = d.getString("scopeType") ?: d.getString("scopeProgramType") ?: "all"
         return MembershipPlan(
             id = d.id,
             name = d.getString("name") ?: "",
             price = d.getDouble("price") ?: (d.getLong("price")?.toDouble() ?: 0.0),
             currency = d.getString("currency") ?: "USD",
             durationDays = d.getLong("durationDays")?.toInt() ?: 30,
-            scopeType = d.getString("scopeType") ?: d.getString("scopeProgramType") ?: "all",
-            scopeProgramType = d.getString("scopeProgramType") ?: "",
-            scopeMbbsYear = d.getString("scopeMbbsYear") ?: "",
-            scopeLicensingPathway = d.getString("scopeLicensingPathway") ?: "",
+            scopeType = scopeType,
+            scopeProgramType = d.getString("scopeProgramType") ?: scopeType,
+            scopeMbbsYear = mbbsYear,
+            scopeLicensingPathway = licensingPathway,
+            mbbsYear = mbbsYear,
+            licensingPathway = licensingPathway,
             scopeIds = (d.get("scopeIds") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList(),
             features = (d.get("features") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList(),
             isActive = d.getBoolean("isActive") ?: true,
@@ -1863,12 +1878,17 @@ class MedBankRepository(
     }
 
     suspend fun savePlan(plan: MembershipPlan) {
-        val data = hashMapOf(
+        val data = hashMapOf<String, Any?>(
             "name" to plan.name,
             "price" to plan.price,
             "currency" to plan.currency,
             "durationDays" to plan.durationDays,
             "scopeType" to plan.scopeType,
+            "mbbsYear" to (if (plan.scopeType == "mbbs") plan.mbbsYear else ""),
+            "licensingPathway" to (if (plan.scopeType == "licensing") plan.licensingPathway else ""),
+            "scopeMbbsYear" to (if (plan.scopeType == "mbbs") plan.mbbsYear else ""),
+            "scopeLicensingPathway" to (if (plan.scopeType == "licensing") plan.licensingPathway else ""),
+            "scopeProgramType" to plan.scopeType,
             "scopeIds" to plan.scopeIds,
             "features" to plan.features,
             "isActive" to plan.isActive,
@@ -2161,7 +2181,7 @@ class MedBankRepository(
             val data = mapOf(
                 "title" to title,
                 "message" to message,
-                "topic" to "medbank_announcements",
+                "topic" to "all_students",
                 "createdAt" to FieldValue.serverTimestamp()
             )
             firestore.collection("broadcasts").add(data).await()
@@ -2409,6 +2429,55 @@ class MedBankRepository(
             "updatedAt" to FieldValue.serverTimestamp()
         )
         firestore.collection("settings").document("banner").set(data).await()
+    }
+
+    fun observePaymentAccounts(activeOnly: Boolean = false): Flow<List<com.example.data.models.PaymentAccount>> = callbackFlow {
+        val ref = firestore.collection("paymentAccounts")
+        val reg = ref.addSnapshotListener { snapshot, error ->
+            if (error != null || snapshot == null) {
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+            val list = snapshot.documents.mapNotNull { doc ->
+                com.example.data.models.PaymentAccount(
+                    id = doc.id,
+                    bankName = doc.getString("bankName") ?: "",
+                    accountTitle = doc.getString("accountTitle") ?: "",
+                    accountNumber = doc.getString("accountNumber") ?: "",
+                    iban = doc.getString("iban") ?: "",
+                    logoUrl = doc.getString("logoUrl") ?: "",
+                    isActive = doc.getBoolean("isActive") ?: true,
+                    order = doc.getLong("order")?.toInt() ?: 0
+                )
+            }.filter { if (activeOnly) it.isActive else true }
+             .sortedWith(compareBy({ it.order }, { it.bankName.lowercase() }))
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun savePaymentAccount(account: com.example.data.models.PaymentAccount) {
+        val ref = if (account.id.isNotBlank()) {
+            firestore.collection("paymentAccounts").document(account.id)
+        } else {
+            firestore.collection("paymentAccounts").document()
+        }
+        val data = mapOf(
+            "bankName" to account.bankName.trim(),
+            "accountTitle" to account.accountTitle.trim(),
+            "accountNumber" to account.accountNumber.trim(),
+            "iban" to account.iban.trim(),
+            "logoUrl" to account.logoUrl.trim(),
+            "isActive" to account.isActive,
+            "order" to account.order
+        )
+        ref.set(data, SetOptions.merge()).await()
+    }
+
+    suspend fun deletePaymentAccount(accountId: String) {
+        if (accountId.isNotBlank()) {
+            firestore.collection("paymentAccounts").document(accountId).delete().await()
+        }
     }
 }
 

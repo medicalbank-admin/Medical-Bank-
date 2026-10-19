@@ -134,6 +134,8 @@ data class MembershipPlan(
     val scopeProgramType: String = "",
     val scopeMbbsYear: String = "",
     val scopeLicensingPathway: String = "",
+    val mbbsYear: String = "",
+    val licensingPathway: String = "",
     val scopeIds: List<String> = emptyList(),
     val features: List<String> = emptyList(),
     val isActive: Boolean = true,
@@ -233,6 +235,13 @@ data class AppBanner(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
-
-
-
+data class PaymentAccount(
+    val id: String = "",
+    val bankName: String = "",
+    val accountTitle: String = "",
+    val accountNumber: String = "",
+    val iban: String = "",
+    val logoUrl: String = "",
+    val isActive: Boolean = true,
+    val order: Int = 0
+)

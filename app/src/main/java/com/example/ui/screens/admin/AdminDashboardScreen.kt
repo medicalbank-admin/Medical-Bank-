@@ -461,6 +461,48 @@ fun AdminDashboardScreen(viewModel: MedBankViewModel) {
                             )
                         }
                     }
+
+                    // Action 4: Billing Accounts
+                    Surface(
+                        onClick = { viewModel.navigateToAdminSection(AdminSection.BILLING_ACCOUNTS) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = BrandBluePastel.copy(alpha = 0.4f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("admin_action_billing_accounts")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            MedBankIconBadge(
+                                icon = Icons.Default.AccountBalance,
+                                badgeColor = BrandBlue,
+                                backgroundColor = CardSurface,
+                                size = 36.dp,
+                                iconSize = 20.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Billing Accounts",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "Manage bank accounts, JazzCash & Easypaisa payment details",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = TextSecondary
+                            )
+                        }
+                    }
                 }
             }
 
@@ -669,7 +711,7 @@ fun AdminDashboardScreen(viewModel: MedBankViewModel) {
                     )
 
                     Text(
-                        text = "• Sends FCM notification to topic: medbank_announcements\n• Automatically displays in student home screen carousel",
+                        text = "• Sends FCM notification to topic: all_students\n• Automatically displays in student home screen carousel",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary,
                         fontSize = 11.sp

@@ -205,6 +205,17 @@ fun ProfileScreen(viewModel: MedBankViewModel) {
                     modifier = Modifier.testTag("menu_membership")
                 )
 
+                // Payment Methods
+                MedBankListItem(
+                    title = "Payment Methods",
+                    subtitle = "Bank transfer, JazzCash & Easypaisa accounts",
+                    icon = Icons.Default.AccountBalance,
+                    iconColor = BrandBlue,
+                    iconBgColor = BrandBluePastel,
+                    onClick = { viewModel.openProfileScreen("billing_accounts") },
+                    modifier = Modifier.testTag("menu_payment_methods")
+                )
+
                 // Refer & Earn
                 MedBankListItem(
                     title = "Refer & Earn",
@@ -267,7 +278,7 @@ fun ProfileScreen(viewModel: MedBankViewModel) {
 
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "Medical Bank Candidate App • v1.0.4",
+                text = "Medical Bank Candidate App • v1.0.9 - CANARY",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary
             )

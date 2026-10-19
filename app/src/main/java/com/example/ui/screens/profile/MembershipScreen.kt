@@ -273,6 +273,22 @@ fun MembershipScreen(
                                     color = BrandBlue,
                                     fontWeight = FontWeight.SemiBold
                                 )
+                                val trackBadge = if (plan.scopeType.equals("mbbs", ignoreCase = true)) {
+                                    val y = plan.mbbsYear.ifBlank { plan.scopeMbbsYear }
+                                    if (y.isNotBlank()) "MBBS: $y" else "MBBS Track"
+                                } else if (plan.scopeType.equals("licensing", ignoreCase = true)) {
+                                    val p = plan.licensingPathway.ifBlank { plan.scopeLicensingPathway }
+                                    if (p.isNotBlank()) "Licensing: $p" else "Licensing Track"
+                                } else null
+                                if (trackBadge != null) {
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = trackBadge,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextSecondary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                             MedBankChip(text = "${plan.durationDays} DAYS", color = BrandBlue, bgColor = BrandBluePastel)
                         }
@@ -332,11 +348,26 @@ fun MembershipScreen(
         val plan = selectedPlanForUpgrade!!
         AlertDialog(
             onDismissRequest = { showUpgradeDialog = false },
-            title = { Text("Request Plan: ${plan.name}", fontWeight = FontWeight.Bold) },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = CardSurface,
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 420.dp),
+            title = {
+                Text(
+                    text = "Request Plan: ${plan.name}",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary
+                )
+            },
             text = {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.verticalScroll(rememberScrollState())
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                        .verticalScroll(rememberScrollState())
                 ) {
                     Text(
                         text = "Price: ${plan.currency} ${plan.price} for ${plan.durationDays} days access.",
@@ -347,7 +378,7 @@ fun MembershipScreen(
                     if (!submitSuccessMsg.isNullOrBlank()) {
                         Surface(
                             color = BrandSuccessPastel,
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
@@ -363,34 +394,42 @@ fun MembershipScreen(
                     Text(
                         text = "Attach Payment Proof (Screenshot / Receipt)",
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
                     )
 
                     OutlinedCard(
                         onClick = { filePickerLauncher.launch("*/*") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.outlinedCardColors(containerColor = CardSurface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderLight)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
+                                .padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Icon(
                                     imageVector = if (selectedFileUri != null) Icons.Default.CheckCircle else Icons.Default.CloudUpload,
                                     contentDescription = null,
-                                    tint = BrandBlue
+                                    tint = BrandBlue,
+                                    modifier = Modifier.size(24.dp)
                                 )
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(
                                         text = if (selectedFileUri != null) selectedFileName else "Attach receipt (Image/PDF)",
                                         style = MaterialTheme.typography.bodyMedium,
                                         maxLines = 1,
-                                        fontWeight = if (selectedFileUri != null) FontWeight.SemiBold else FontWeight.Normal
+                                        fontWeight = if (selectedFileUri != null) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = TextPrimary
                                     )
                                     Text(
                                         text = if (selectedFileUri != null) "File attached" else "Supports JPG, PNG, PDF",
@@ -399,11 +438,12 @@ fun MembershipScreen(
                                     )
                                 }
                             }
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (selectedFileUri != null) "Change" else "Browse",
                                 color = BrandBlue,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
+                                fontSize = 14.sp
                             )
                         }
                     }
@@ -439,13 +479,13 @@ fun MembershipScreen(
                         }
                     },
                     enabled = !isSubmitting && selectedFileBase64.isNotBlank(),
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = BrandBlue)
                 ) {
                     if (isSubmitting) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White)
                     } else {
-                        Text("Submit Payment Proof & Request")
+                        Text("Submit Payment Proof & Request", fontWeight = FontWeight.Bold)
                     }
                 }
             },

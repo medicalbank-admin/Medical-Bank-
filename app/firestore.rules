@@ -97,5 +97,11 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+
+    // Payment Accounts
+    match /paymentAccounts/{accountId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
   }
 }

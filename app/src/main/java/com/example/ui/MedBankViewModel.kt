@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.MedBankDatabase
@@ -421,10 +422,21 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
 
     fun openAccessRequestSheet(exam: Exam) {
         viewModelScope.launch {
+            _trackPlans.value = emptyList()
             val plans = repository.getPlansForExamTrack(exam.parentType, exam.parentId)
             _trackPlans.value = plans
             val defaultPlan = plans.firstOrNull()
             _accessSheet.value = AccessSheetData(exam = exam, plan = defaultPlan)
+        }
+    }
+
+    fun reloadPlansForExam(exam: Exam) {
+        viewModelScope.launch {
+            val plans = repository.getPlansForExamTrack(exam.parentType, exam.parentId)
+            _trackPlans.value = plans
+            if (_accessSheet.value?.plan == null || plans.none { it.id == _accessSheet.value?.plan?.id }) {
+                _accessSheet.value = _accessSheet.value?.copy(plan = plans.firstOrNull())
+            }
         }
     }
 
@@ -820,6 +832,34 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
                 refreshAdminStats()
                 onDone(true)
             } catch (e: Exception) {
+                onDone(false)
+            }
+        }
+    }
+
+    fun observePaymentAccounts(activeOnly: Boolean = false): Flow<List<com.example.data.models.PaymentAccount>> {
+        return repository.observePaymentAccounts(activeOnly)
+    }
+
+    fun savePaymentAccount(account: com.example.data.models.PaymentAccount, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.savePaymentAccount(account)
+                onDone(true)
+            } catch (e: Exception) {
+                Log.e("MedBankViewModel", "Failed to save payment account: ${e.message}")
+                onDone(false)
+            }
+        }
+    }
+
+    fun deletePaymentAccount(accountId: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.deletePaymentAccount(accountId)
+                onDone(true)
+            } catch (e: Exception) {
+                Log.e("MedBankViewModel", "Failed to delete payment account: ${e.message}")
                 onDone(false)
             }
         }

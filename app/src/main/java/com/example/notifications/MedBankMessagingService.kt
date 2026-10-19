@@ -30,26 +30,38 @@ class MedBankMessagingService : FirebaseMessagingService() {
                         .addOnFailureListener { e -> Log.e("FCM_TOKEN", "Failed to save token", e) }
                 }
             } catch (_: Exception) {}
-        } else {
-            Log.d("FCM_TOKEN", "User not logged in yet when onNewToken fired. Token will be saved on login.")
         }
+        // Ensure subscribed to global topic on new token
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().subscribeToTopic("all_students")
     }
 
-    override fun onMessageReceived(message: RemoteMessage) {
-        super.onMessageReceived(message)
-        Log.d(TAG, "Message received from: ${message.from}")
+    override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        super.onMessageReceived(remoteMessage)
+        Log.d(TAG, "Message received from: ${remoteMessage.from}")
 
-        val title = message.notification?.title ?: message.data["title"] ?: "MedBank Notification"
-        val body = message.notification?.body ?: message.data["body"] ?: "You have a new update in MedBank."
-        val route = message.data["route"] ?: message.notification?.tag
-        val channelId = message.data["channelId"] ?: NotificationHelper.CHANNEL_DEFAULT
+        // Use your existing NotificationHelper to show the notification
+        remoteMessage.notification?.let {
+            NotificationHelper.showNotification(
+                context = this,
+                title = it.title ?: "Medical Bank",
+                body = it.body ?: "New update available",
+                channelId = "medbank_default",
+                route = remoteMessage.data["route"] ?: "home"
+            )
+            return
+        }
 
+        // Fallback for data-only messages
+        val dataTitle = remoteMessage.data["title"] ?: "Medical Bank"
+        val dataBody = remoteMessage.data["body"] ?: "New update available"
+        val dataRoute = remoteMessage.data["route"] ?: "home"
+        val channelId = remoteMessage.data["channelId"] ?: NotificationHelper.CHANNEL_DEFAULT
         NotificationHelper.showNotification(
-            context = applicationContext,
-            title = title,
-            body = body,
+            context = this,
+            title = dataTitle,
+            body = dataBody,
             channelId = channelId,
-            route = route
+            route = dataRoute
         )
     }
 }

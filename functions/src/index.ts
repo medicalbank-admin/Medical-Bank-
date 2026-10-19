@@ -404,3 +404,45 @@ export const cleanupExpiredEntitlements = functions.pubsub
     }
   });
 
+/**
+ * // REQUIRES: Enable Cloud Messaging in Firebase Console, then deploy via CLI
+ * 11. onBroadcastCreated
+ * Listens for new broadcasts in Firestore and sends FCM push notification to topic 'all_students'.
+ */
+export const onBroadcastCreated = functions.firestore
+  .document("broadcasts/{broadcastId}")
+  .onCreate(async (snap, context) => {
+    const broadcast = snap.data();
+    if (!broadcast) return;
+
+    const titleText = broadcast.title || "Medical Bank Broadcast";
+    const bodyText = broadcast.message || "";
+    const topic = broadcast.topic || "all_students";
+
+    const message = {
+      topic: topic,
+      notification: {
+        title: titleText,
+        body: bodyText,
+      },
+      android: {
+        notification: {
+          channelId: "medbank_default",
+        },
+      },
+      data: {
+        route: "home",
+        title: titleText,
+        body: bodyText,
+        broadcastId: context.params.broadcastId,
+      },
+    };
+
+    try {
+      await admin.messaging().send(message);
+      functions.logger.info(`Broadcast successfully sent to topic: ${topic}`);
+    } catch (error) {
+      functions.logger.error("Failed to send broadcast notification:", error);
+    }
+  });
+

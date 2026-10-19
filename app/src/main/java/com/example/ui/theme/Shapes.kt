@@ -9,8 +9,8 @@ val Shapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(12.dp),
     medium = RoundedCornerShape(16.dp), // Card radius: 16dp
-    large = RoundedCornerShape(24.dp),
-    extraLarge = CircleShape // Button radius: Pill
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(24.dp) // Dialogs / Modals: 24dp
 )
 
 val CardShape = RoundedCornerShape(16.dp)
