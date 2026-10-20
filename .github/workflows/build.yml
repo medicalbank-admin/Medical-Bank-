@@ -24,12 +24,17 @@ jobs:
       with:
         gradle-version: '9.3.1'
 
-    - name: Generate Debug Keystore
+    - name: Decode Keystore
       run: |
-        keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/release.keystore
 
-    - name: Build Debug APK
-      run: gradle assembleDebug
+    - name: Build APK
+      run: |
+        gradle assembleDebug \
+          -Pandroid.injected.signing.store.file=$PWD/app/release.keystore \
+          -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+          -Pandroid.injected.signing.key.alias=release \
+          -Pandroid.injected.signing.key.password=${{ secrets.KEYSTORE_PASSWORD }}
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
