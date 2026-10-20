@@ -571,6 +571,56 @@ class MedBankRepository(
         }
     }
 
+    suspend fun getUserByUid(uid: String): User? {
+    return try {
+        val doc = firestore.collection("users").document(uid).get().await()
+        if (doc.exists()) {
+            val entitlementsRaw = doc.get("entitlements") as? Map<String, Any> ?: emptyMap()
+            val parsed = mutableMapOf<String, Entitlement>()
+            entitlementsRaw.forEach { (scopeId, value) ->
+                if (value is Map<*, *>) {
+                    parsed[scopeId] = Entitlement(
+                        planId = value["planId"] as? String ?: "",
+                        planName = value["planName"] as? String ?: "Active Pass",
+                        expiresAt = (value["expiresAt"] as? Number)?.toLong() ?: 0L,
+                        status = value["status"] as? String ?: "active"
+                    )
+                }
+            }
+
+            User(
+                uid = doc.id,
+                role = doc.getString("role") ?: "student",
+                fullName = doc.getString("fullName") ?: "",
+                cnic = doc.getString("cnic") ?: "",
+                email = doc.getString("email") ?: "",
+                phone = doc.getString("phone") ?: "",
+                country = doc.getString("country") ?: "",
+                photoUrl = doc.getString("photoUrl") ?: "",
+                photoBase64 = doc.getString("photoBase64") ?: "",
+                programType = doc.getString("programType") ?: "mbbs",
+                mbbsYear = doc.getLong("mbbsYear")?.toInt(),
+                licensingPath = doc.getString("licensingPath"),
+                entitlements = parsed,
+                fcmToken = doc.getString("fcmToken") ?: "",
+                fcmTokenUpdatedAt = doc.getLong("fcmTokenUpdatedAt") ?: 0L,
+                subscribedTopics = (doc.get("subscribedTopics") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList(),
+                notificationOptIn = doc.getBoolean("notificationOptIn") ?: true,
+                createdAt = doc.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
+                lastLoginAt = doc.getTimestamp("lastLoginAt")?.toDate()?.time ?: System.currentTimeMillis(),
+                referralCode = doc.getString("referralCode") ?: "",
+                referredBy = doc.getString("referredBy"),
+                walletBalance = doc.getDouble("walletBalance") ?: (doc.getLong("walletBalance")?.toDouble() ?: 0.0),
+                totalEarned = doc.getDouble("totalEarned") ?: (doc.getLong("totalEarned")?.toDouble() ?: 0.0)
+            )
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to get user by UID: ${e.message}")
+        null
+    }
+    }
     fun observeUser(uid: String): Flow<User?> = callbackFlow {
         val docRef = firestore.collection("users").document(uid)
         val registration = docRef.addSnapshotListener { snapshot, error ->
