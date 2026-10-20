@@ -1,0 +1,17 @@
+```yaml
+name: Generate Keystore
+on: workflow_dispatch
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Keystore
+        run: |
+          keytool -genkeypair -v -keystore release.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000 -storepass password123 -keypass password123 -dname "CN=Medical Bank, OU=Dev, O=MedicalBank, L=City, S=State, C=PK"
+          base64 release.keystore > keystore_base64.txt
+      - name: Upload Keystore
+        uses: actions/upload-artifact@v4
+        with:
+          name: keystore-artifact
+          path: keystore_base64.txt
+```
