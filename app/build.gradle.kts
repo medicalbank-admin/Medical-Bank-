@@ -10,19 +10,19 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk = 34 // CHANGED to 34 to fix parsing error
 
   defaultConfig {
     applicationId = "pk.medicalbank.app"
     minSdk = 24
-    targetSdk = 36
+    targetSdk = 34 // CHANGED to 34 to fix parsing error
     versionCode = 2
     versionName = "2.0.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
-  // UPDATED: Signing configs now point to the permanent GitHub Actions keystore
+  // Signing configs now point to the permanent GitHub Actions keystore
   signingConfigs {
     create("release") {
       storeFile = file("release.keystore")
@@ -41,8 +41,8 @@ android {
   buildTypes {
     release {
       isCrunchPngs = false
-      isMinifyEnabled = false // UPDATED: Enabled code shrinking
-      isShrinkResources = false // UPDATED: Enabled resource shrinking
+      isMinifyEnabled = false 
+      isShrinkResources = false 
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
