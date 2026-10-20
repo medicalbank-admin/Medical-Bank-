@@ -920,18 +920,20 @@ class MedBankRepository(
     }
 
     fun observeExamsForSubjectOrParent(subject: Subject): Flow<List<Exam>> = callbackFlow {
-        val ref = firestore.collection("exams").whereEqualTo("isPublished", true)
-        val reg = ref.addSnapshotListener { snapshot, _ ->
-            val all = snapshot?.documents?.mapNotNull { d -> firestoreDocToExam(d) } ?: emptyList()
-            val filtered = all.filter { ex ->
-                ex.subjectId == subject.id ||
-                ex.parentId == subject.id ||
-                (ex.parentType == subject.parentType && (ex.parentId == subject.parentId || subject.parentId == "all" || subject.parentId.isBlank()))
-            }.sortedByDescending { it.createdAt }
-            trySend(filtered)
+    val ref = firestore.collection("exams")
+        .whereEqualTo("isPublished", true)
+        .whereEqualTo("subjectId", subject.id) // STRICT FILTER: Only fetch exams for this exact subject
+
+    val reg = ref.addSnapshotListener { snapshot, error ->
+        if (error != null) {
+            close(error)
+            return@addSnapshotListener
         }
-        awaitClose { reg.remove() }
+        val list = snapshot?.documents?.mapNotNull { d -> firestoreDocToExam(d) } ?: emptyList()
+        trySend(list.sortedByDescending { it.createdAt })
     }
+    awaitClose { reg.remove() }
+}
 
     fun observeAllExams(): Flow<List<Exam>> = callbackFlow {
         val ref = firestore.collection("exams").orderBy("createdAt")
