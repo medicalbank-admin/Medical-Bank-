@@ -10,12 +10,12 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk = 34 // CHANGED to 34 to fix parsing error
+  compileSdk = 36 // CHANGED to 36 to satisfy modern AndroidX dependencies
 
   defaultConfig {
     applicationId = "pk.medicalbank.app"
     minSdk = 24
-    targetSdk = 34 // CHANGED to 34 to fix parsing error
+    targetSdk = 34 // KEPT at 34 to prevent parsing errors on Android 12
     versionCode = 2
     versionName = "2.0.0"
 
