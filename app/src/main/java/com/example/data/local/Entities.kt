@@ -148,6 +148,8 @@ data class MembershipPlanEntity(
     val currency: String,
     val durationDays: Int,
     val scopeType: String,
+    val scopeId: String = "",
+    val scopeName: String = "",
     val scopeIdsJson: String,
     val featuresJson: String,
     val isActive: Boolean,

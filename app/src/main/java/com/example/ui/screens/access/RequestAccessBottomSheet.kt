@@ -118,7 +118,62 @@ fun RequestAccessBottomSheet(viewModel: MedBankViewModel) {
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                // Edge case: Already unlocked check
+                val currentUser by viewModel.currentUser.collectAsState()
+                val activeEnt = viewModel.getActiveEntitlementForExam(exam)
+                val hasYearUnlocked = currentUser?.let { u ->
+                    val now = System.currentTimeMillis()
+                    val parentKeys = listOf(
+                        exam.parentId,
+                        "${exam.parentType}_${exam.parentId}",
+                        if (exam.parentId.startsWith("year_")) "mbbs_${exam.parentId}" else "",
+                        if (exam.parentType == "mbbs" && !exam.parentId.startsWith("mbbs_")) "mbbs_${exam.parentId}" else "",
+                        if (exam.parentType == "licensing" && !exam.parentId.startsWith("licensing_")) "licensing_${exam.parentId}" else ""
+                    ).filter { it.isNotBlank() }
+                    parentKeys.any { k ->
+                        val ent = u.entitlements[k]
+                        ent != null && ent.status == "active" && (ent.expiresAt == 0L || ent.expiresAt > now)
+                    }
+                } ?: false
+
+                if (activeEnt != null) {
+                    val messageText = if (hasYearUnlocked) {
+                        "You already have access to this exam via your Year plan."
+                    } else {
+                        "You already have access to this exam via your ${activeEnt.planName.ifBlank { "active" }} plan."
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("already_unlocked_message")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Access Active",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = messageText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
 
                 // Clickable button to view payment accounts
                 Surface(
@@ -276,6 +331,33 @@ fun RequestAccessBottomSheet(viewModel: MedBankViewModel) {
                                         )
                                     }
 
+                                    val scopeDisplay = if (plan.scopeName.isNotBlank()) {
+                                        "Includes: ${plan.scopeName}"
+                                    } else {
+                                        when (plan.scopeType.lowercase()) {
+                                            "all_access" -> "Includes: All Access"
+                                            "track" -> "Includes: Entire ${plan.scopeId.removePrefix("track_").uppercase()} Track"
+                                            "year" -> "Includes: ${plan.scopeId.replace("_", " ").uppercase()}"
+                                            "exam" -> "Includes: Single Exam"
+                                            else -> "Includes: ${plan.name}"
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = scopeDisplay,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = "Duration: ${plan.durationDays} Days",
                                         style = MaterialTheme.typography.bodySmall,

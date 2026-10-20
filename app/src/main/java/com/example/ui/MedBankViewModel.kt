@@ -409,21 +409,100 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
         return false
     }
 
-    // --- Entitlement & Locking Check ---
-    fun isExamUnlocked(exam: Exam): Boolean {
-        val user = _currentUser.value ?: return false
-        if (user.role == "admin") return true // Admin has full access
+    // --- Multi-Level Entitlement & Locking Check ---
+    fun getActiveEntitlementForExam(exam: Exam): Entitlement? {
+        val user = _currentUser.value ?: return null
+        if (user.role == "admin") {
+            return Entitlement(planId = "admin_full_access", planName = "Admin Access", expiresAt = Long.MAX_VALUE, status = "active")
+        }
+        val now = System.currentTimeMillis()
+        fun isActive(ent: Entitlement?): Boolean =
+            ent != null && ent.status == "active" && (ent.expiresAt == 0L || ent.expiresAt > now)
 
-        val scopeId = "${exam.parentType}_${exam.parentId}"
-        val ent = user.entitlements[scopeId]
-        
-        return ent != null && ent.status == "active" && ent.expiresAt > System.currentTimeMillis()
+        // 1. Specific exam unlock: exam_{exam.id} or {exam.id}
+        val examKeys = listOf("exam_${exam.id}", exam.id)
+        for (k in examKeys) {
+            val ent = user.entitlements[k]
+            if (isActive(ent)) return ent
+        }
+
+        // 2. Year or Pathway unlock: {exam.parentId} (e.g., "mbbs_year_1" or "licensing_nre")
+        val parentKeys = listOf(
+            exam.parentId,
+            "${exam.parentType}_${exam.parentId}",
+            if (exam.parentId.startsWith("year_")) "mbbs_${exam.parentId}" else "",
+            if (exam.parentType == "mbbs" && !exam.parentId.startsWith("mbbs_")) "mbbs_${exam.parentId}" else "",
+            if (exam.parentType == "licensing" && !exam.parentId.startsWith("licensing_")) "licensing_${exam.parentId}" else ""
+        ).filter { it.isNotBlank() }
+        for (k in parentKeys) {
+            val ent = user.entitlements[k]
+            if (isActive(ent)) return ent
+        }
+
+        // 3. Track unlock: track_{exam.parentType} (e.g., "track_mbbs" or "track_licensing")
+        val trackKeys = listOf(
+            "track_${exam.parentType}",
+            exam.parentType,
+            "track_${exam.parentType.removePrefix("track_")}"
+        )
+        for (k in trackKeys) {
+            val ent = user.entitlements[k]
+            if (isActive(ent)) return ent
+        }
+
+        // 4. all_access (Unlocks everything)
+        val allEnt = user.entitlements["all_access"]
+        if (isActive(allEnt)) return allEnt
+
+        // 5. Check if any active entitlement has planId matching exam.accessPlanIds
+        if (exam.accessPlanIds.isNotEmpty()) {
+            val ent = user.entitlements.values.firstOrNull { isActive(it) && it.planId in exam.accessPlanIds }
+            if (ent != null) return ent
+        }
+
+        return null
+    }
+
+    fun isExamUnlocked(exam: Exam): Boolean {
+        return getActiveEntitlementForExam(exam) != null
+    }
+
+    fun isExamExpired(exam: Exam): Boolean {
+        val user = _currentUser.value ?: return false
+        if (isExamUnlocked(exam)) return false
+        val now = System.currentTimeMillis()
+        val allMatchingKeys = listOf(
+            "exam_${exam.id}",
+            exam.id,
+            exam.parentId,
+            "${exam.parentType}_${exam.parentId}",
+            "track_${exam.parentType}",
+            exam.parentType,
+            "all_access"
+        )
+        return allMatchingKeys.any { k ->
+            val ent = user.entitlements[k]
+            ent != null && (ent.status == "expired" || (ent.expiresAt in 1..now))
+        }
+    }
+
+    fun isExamPending(exam: Exam): Boolean {
+        val pending = _pendingAccessRequests.value
+        val keys = listOf(
+            "exam_${exam.id}",
+            exam.id,
+            exam.parentId,
+            "${exam.parentType}_${exam.parentId}",
+            "track_${exam.parentType}",
+            "all_access"
+        )
+        return keys.any { pending.contains(it) }
     }
 
     fun openAccessRequestSheet(exam: Exam) {
         viewModelScope.launch {
             _trackPlans.value = emptyList()
-            val plans = repository.getPlansForExamTrack(exam.parentType, exam.parentId)
+            val plans = repository.getPlansForExam(exam)
             _trackPlans.value = plans
             val defaultPlan = plans.firstOrNull()
             _accessSheet.value = AccessSheetData(exam = exam, plan = defaultPlan)
@@ -432,7 +511,7 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
 
     fun reloadPlansForExam(exam: Exam) {
         viewModelScope.launch {
-            val plans = repository.getPlansForExamTrack(exam.parentType, exam.parentId)
+            val plans = repository.getPlansForExam(exam)
             _trackPlans.value = plans
             if (_accessSheet.value?.plan == null || plans.none { it.id == _accessSheet.value?.plan?.id }) {
                 _accessSheet.value = _accessSheet.value?.copy(plan = plans.firstOrNull())
@@ -455,13 +534,14 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
             val plan = sheet.plan
             val planName = plan?.name ?: "Full Access Pass"
             val planId = plan?.id ?: "standard_plan"
-            val scopeId = "${sheet.exam.parentType}_${sheet.exam.parentId}"
+            val scopeType = plan?.scopeType?.ifBlank { "exam" } ?: "exam"
+            val scopeId = plan?.scopeId?.ifBlank { "exam_${sheet.exam.id}" } ?: "exam_${sheet.exam.id}"
 
             repository.createAccessRequest(
                 uid = user.uid,
                 studentName = user.fullName,
                 cnic = user.cnic,
-                scopeType = sheet.exam.parentType,
+                scopeType = scopeType,
                 scopeId = scopeId,
                 planId = planId,
                 planName = planName,
@@ -505,13 +585,14 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
             _isSubmittingRequest.value = true
             val planName = selectedPlan.name
             val planId = selectedPlan.id
-            val scopeId = "${sheet.exam.parentType}_${sheet.exam.parentId}"
+            val scopeType = selectedPlan.scopeType.ifBlank { "exam" }
+            val scopeId = selectedPlan.scopeId.ifBlank { "exam_${sheet.exam.id}" }
 
             repository.uploadPaymentProofAndCreateRequest(
                 uid = user.uid,
                 studentName = user.fullName,
                 cnic = user.cnic,
-                scopeType = sheet.exam.parentType,
+                scopeType = scopeType,
                 scopeId = scopeId,
                 planId = planId,
                 planName = planName,

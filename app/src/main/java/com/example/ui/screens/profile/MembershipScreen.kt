@@ -273,17 +273,21 @@ fun MembershipScreen(
                                     color = BrandBlue,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                                val trackBadge = if (plan.scopeType.equals("mbbs", ignoreCase = true)) {
-                                    val y = plan.mbbsYear.ifBlank { plan.scopeMbbsYear }
-                                    if (y.isNotBlank()) "MBBS: $y" else "MBBS Track"
-                                } else if (plan.scopeType.equals("licensing", ignoreCase = true)) {
-                                    val p = plan.licensingPathway.ifBlank { plan.scopeLicensingPathway }
-                                    if (p.isNotBlank()) "Licensing: $p" else "Licensing Track"
+                                val scopeBadge = if (plan.scopeName.isNotBlank()) {
+                                    "Includes: ${plan.scopeName}"
+                                } else if (plan.scopeType.equals("all_access", ignoreCase = true)) {
+                                    "Includes: All Access"
+                                } else if (plan.scopeType.equals("track", ignoreCase = true)) {
+                                    "Includes: Entire ${plan.scopeId.removePrefix("track_").uppercase()} Track"
+                                } else if (plan.scopeType.equals("year", ignoreCase = true)) {
+                                    "Includes: ${plan.scopeId.replace("_", " ").uppercase()}"
+                                } else if (plan.scopeType.equals("exam", ignoreCase = true)) {
+                                    "Includes: Specific Exam"
                                 } else null
-                                if (trackBadge != null) {
+                                if (scopeBadge != null) {
                                     Spacer(modifier = Modifier.height(3.dp))
                                     Text(
-                                        text = trackBadge,
+                                        text = scopeBadge,
                                         style = MaterialTheme.typography.labelSmall,
                                         color = TextSecondary,
                                         fontWeight = FontWeight.Medium

@@ -353,12 +353,11 @@ fun FolderTreeScreen(viewModel: MedBankViewModel) {
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // MedBankSegmentedTabs for MBBS vs Licensing
-                    MedBankSegmentedTabs(
-                        tabs = listOf("MBBS Years 1–6", "Licensing Pathways"),
-                        selectedIndex = if (selectedProgramType == "mbbs") 0 else 1,
-                        onTabSelected = { idx ->
-                            viewModel.selectProgramType(if (idx == 0) "mbbs" else "licensing")
+                    // 4 Top-Level Folders/Tabs
+                    HomeFolderTabSelector(
+                        selectedType = selectedProgramType,
+                        onSelect = { type ->
+                            viewModel.selectProgramType(type)
                         },
                         modifier = Modifier.testTag("home_segmented_tabs")
                     )
@@ -386,13 +385,25 @@ fun FolderTreeScreen(viewModel: MedBankViewModel) {
                         )
                     }
 
-                    // LEVEL 1: ROOT DIRECTORY (MBBS Years or Licensing Pathways)
+                    // LEVEL 1: ROOT DIRECTORY (4 Top-Level Folders)
                     selectedProgramType == "mbbs" -> {
                         MbbsYearsGrid(viewModel = viewModel)
                     }
 
-                    else -> {
+                    selectedProgramType == "licensing" -> {
                         LicensingPathwaysList(viewModel = viewModel)
+                    }
+
+                    selectedProgramType == "past_papers" -> {
+                        PastPapersFolderList(viewModel = viewModel)
+                    }
+
+                    selectedProgramType == "mock_exams" -> {
+                        MockExamsFolderList(viewModel = viewModel)
+                    }
+
+                    else -> {
+                        MbbsYearsGrid(viewModel = viewModel)
                     }
                 }
             }
@@ -638,7 +649,7 @@ fun ExamListContent(
     subject: Subject,
     viewModel: MedBankViewModel
 ) {
-    val exams by viewModel.repository.observePublishedExamsBySubject(subject.id).collectAsState(initial = emptyList())
+    val exams by viewModel.repository.observeExamsForSubjectOrParent(subject).collectAsState(initial = emptyList())
     val currentUser by viewModel.currentUser.collectAsState()
     val startingExamId by viewModel.isStartingExam.collectAsState()
 
@@ -661,17 +672,15 @@ fun ExamListContent(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             items(exams) { exam ->
-                val scopeId = "${exam.parentType}_${exam.parentId}"
-                val ent = currentUser?.entitlements?.get(scopeId)
-                val isPending = viewModel.pendingAccessRequests.collectAsState().value.contains(scopeId)
-                
-                val isUnlocked = ent != null && ent.status == "active" && ent.expiresAt > System.currentTimeMillis()
-                val isExpired = ent != null && (ent.status == "expired" || ent.expiresAt <= System.currentTimeMillis())
+                val activeEnt = viewModel.getActiveEntitlementForExam(exam)
+                val isUnlocked = activeEnt != null
+                val isPending = viewModel.isExamPending(exam)
+                val isExpired = if (!isUnlocked) viewModel.isExamExpired(exam) else false
 
                 val state = when {
                     isUnlocked -> 3 // Approved/Active
-                    isExpired -> 4 // Expired
                     isPending -> 2 // Pending
+                    isExpired -> 4 // Expired
                     else -> 1 // Not Requested (Locked)
                 }
 
@@ -748,8 +757,13 @@ fun ExamListContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (state == 3) {
+                            val expiryText = if (activeEnt != null && activeEnt.expiresAt > 0L && activeEnt.expiresAt < Long.MAX_VALUE) {
+                                "Unlocked until ${java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(activeEnt.expiresAt))}"
+                            } else {
+                                "Unlocked"
+                            }
                             Text(
-                                text = "Unlocked until ${java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(ent!!.expiresAt))}",
+                                text = expiryText,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = BrandSuccess,
                                 fontWeight = FontWeight.SemiBold
@@ -814,12 +828,270 @@ fun ExamListContent(
                             ) {
                                 Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Unlock Bank", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Text(if (state == 4) "Renew Access" else "Unlock Bank", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun PastPapersFolderList(viewModel: MedBankViewModel) {
+    val dbSubjects by viewModel.repository.observeSubjectsByParentType("past_papers").collectAsState(initial = emptyList())
+    val defaultFolders = remember {
+        listOf(
+            Subject(id = "pp_mbbs", parentType = "past_papers", parentId = "pp_mbbs", name = "MBBS Professional Past Papers", order = 1, isActive = true),
+            Subject(id = "pp_licensing", parentType = "past_papers", parentId = "pp_licensing", name = "Licensing & FCPS Past Papers", order = 2, isActive = true),
+            Subject(id = "pp_annual", parentType = "past_papers", parentId = "pp_annual", name = "Annual & Supplementary Papers", order = 3, isActive = true),
+            Subject(id = "pp_specialty", parentType = "past_papers", parentId = "pp_specialty", name = "Specialty Clinical Papers", order = 4, isActive = true)
+        )
+    }
+    val allFolders = remember(dbSubjects) {
+        val list = mutableListOf<Subject>()
+        list.addAll(dbSubjects)
+        defaultFolders.forEach { def ->
+            if (list.none { it.id == def.id }) {
+                list.add(def)
+            }
+        }
+        list.sortedBy { it.order }
+    }
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        items(allFolders) { folder ->
+            MedBankCard(
+                onClick = { viewModel.selectSubject(folder) },
+                modifier = Modifier.testTag("past_paper_card_${folder.id}")
+            ) {
+                MedBankIconBadge(
+                    icon = Icons.Default.HistoryEdu,
+                    badgeColor = BrandRed,
+                    backgroundColor = BrandRedPastel,
+                    size = 44.dp
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = folder.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Past Exam Papers",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "View Exams",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = BrandRed
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = BrandRed,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MockExamsFolderList(viewModel: MedBankViewModel) {
+    val dbSubjects by viewModel.repository.observeSubjectsByParentType("mock_exams").collectAsState(initial = emptyList())
+    val defaultFolders = remember {
+        listOf(
+            Subject(id = "mock_grand", parentType = "mock_exams", parentId = "mock_grand", name = "Full-Length Grand Mocks", order = 1, isActive = true),
+            Subject(id = "mock_clinical", parentType = "mock_exams", parentId = "mock_clinical", name = "Clinical Vignette Mocks", order = 2, isActive = true),
+            Subject(id = "mock_timed", parentType = "mock_exams", parentId = "mock_timed", name = "High-Yield Timed Mocks", order = 3, isActive = true),
+            Subject(id = "mock_rapid", parentType = "mock_exams", parentId = "mock_rapid", name = "Rapid Revision Mocks", order = 4, isActive = true)
+        )
+    }
+    val allFolders = remember(dbSubjects) {
+        val list = mutableListOf<Subject>()
+        list.addAll(dbSubjects)
+        defaultFolders.forEach { def ->
+            if (list.none { it.id == def.id }) {
+                list.add(def)
+            }
+        }
+        list.sortedBy { it.order }
+    }
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        items(allFolders) { folder ->
+            MedBankCard(
+                onClick = { viewModel.selectSubject(folder) },
+                modifier = Modifier.testTag("mock_exam_card_${folder.id}")
+            ) {
+                MedBankIconBadge(
+                    icon = Icons.Default.Quiz,
+                    badgeColor = AmberWarning,
+                    backgroundColor = AmberWarningPastel,
+                    size = 44.dp
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = folder.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Standardized Mock Tests",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "View Exams",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AmberWarning
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = AmberWarning,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HomeFolderTabSelector(
+    selectedType: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("home_segmented_tabs"),
+        shape = RoundedCornerShape(16.dp),
+        color = CardSurface,
+        shadowElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, DividerColor.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                HomeTabButton(
+                    title = "MBBS (Years 1-6)",
+                    icon = Icons.Default.School,
+                    isSelected = selectedType == "mbbs",
+                    modifier = Modifier.weight(1f).testTag("tab_mbbs"),
+                    onClick = { onSelect("mbbs") }
+                )
+                HomeTabButton(
+                    title = "Licensing Exams",
+                    icon = Icons.Default.VerifiedUser,
+                    isSelected = selectedType == "licensing",
+                    modifier = Modifier.weight(1f).testTag("tab_licensing"),
+                    onClick = { onSelect("licensing") }
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                HomeTabButton(
+                    title = "Past Papers",
+                    icon = Icons.Default.HistoryEdu,
+                    isSelected = selectedType == "past_papers",
+                    modifier = Modifier.weight(1f).testTag("tab_past_papers"),
+                    onClick = { onSelect("past_papers") }
+                )
+                HomeTabButton(
+                    title = "Mock Exams",
+                    icon = Icons.Default.Quiz,
+                    isSelected = selectedType == "mock_exams",
+                    modifier = Modifier.weight(1f).testTag("tab_mock_exams"),
+                    onClick = { onSelect("mock_exams") }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeTabButton(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(44.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) BrandBlue else BrandBluePastel.copy(alpha = 0.35f),
+        contentColor = if (isSelected) Color.White else TextPrimary
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = if (isSelected) Color.White else BrandBlue
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                maxLines = 1
+            )
         }
     }
 }

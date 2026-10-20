@@ -22,7 +22,7 @@ import androidx.room.RoomDatabase
         ExamResultEntity::class,
         UserDeviceEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class MedBankDatabase : RoomDatabase() {

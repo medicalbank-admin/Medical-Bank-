@@ -1576,13 +1576,34 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
     var planDuration by remember { mutableStateOf("30") }
     var planCurrency by remember { mutableStateOf("USD") }
 
-    // Track: [ MBBS ] or [ Licensing Exams ]
-    var selectedTrack by remember { mutableStateOf("mbbs") } // "mbbs" or "licensing"
-    var selectedMbbsYear by remember { mutableStateOf("Year 1") }
-    var selectedLicensingPathway by remember { mutableStateOf("NRE") }
+    // Granular Scope: [ All Access ] [ Entire Track ] [ Specific Year / Pathway ] [ Specific Exam ]
+    var planScope by remember { mutableStateOf("all_access") } // "all_access", "track", "year", "exam"
+    var selectedTargetId by remember { mutableStateOf("all_access") }
+    var scopeName by remember { mutableStateOf("All Access") }
 
-    val mbbsYearsList = listOf("Year 1", "Year 2", "Year 3", "Year 4", "Year 5", "Year 6")
-    val licensingPathwaysList = listOf("NRE", "FCPS", "USMLE", "PLAB", "DHA", "SMLE")
+    val trackOptions = listOf(
+        "track_mbbs" to "MBBS",
+        "track_licensing" to "Licensing",
+        "track_past_papers" to "Past Papers",
+        "track_mock_exams" to "Mock Exams"
+    )
+
+    val yearPathwayOptions = listOf(
+        "mbbs_year_1" to "MBBS Year 1",
+        "mbbs_year_2" to "MBBS Year 2",
+        "mbbs_year_3" to "MBBS Year 3",
+        "mbbs_year_4" to "MBBS Year 4",
+        "mbbs_year_5" to "MBBS Year 5",
+        "mbbs_year_6" to "MBBS Year 6",
+        "licensing_nre" to "NRE",
+        "licensing_fcps" to "FCPS",
+        "licensing_usmle" to "USMLE",
+        "licensing_plab" to "PLAB",
+        "licensing_dha" to "DHA",
+        "licensing_smle" to "SMLE"
+    )
+
+    val allExamsList by viewModel.repository.observeAllExams().collectAsState(initial = emptyList())
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -1593,7 +1614,7 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
             Column {
                 Text("Membership Plans", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    text = "Configure track-specific plans for students",
+                    text = "Configure granular access plans (All Access, Track, Year, Exam)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
@@ -1601,13 +1622,13 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
             Button(
                 onClick = {
                     planToEdit = null
-                    planName = ""
+                    planName = "All Access Pass"
                     planPrice = "49.99"
                     planDuration = "30"
                     planCurrency = "USD"
-                    selectedTrack = "mbbs"
-                    selectedMbbsYear = "Year 1"
-                    selectedLicensingPathway = "NRE"
+                    planScope = "all_access"
+                    selectedTargetId = "all_access"
+                    scopeName = "All Access"
                     showAddDialog = true
                 },
                 colors = ButtonDefaults.buttonColors(
@@ -1629,22 +1650,21 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
             EmptyPlaceholder(
                 icon = Icons.Default.CardMembership,
                 title = "No Membership Plans",
-                subtitle = "Create access plans assigned explicitly to MBBS Years or Licensing Pathways.",
-                actionLabel = "Create Default MBBS Plan",
+                subtitle = "Create access plans assigned to All Access, Tracks, Academic Years, or Specific Exams.",
+                actionLabel = "Create Default All Access Plan",
                 onActionClick = {
                     coroutineScope.launch {
                         viewModel.repository.savePlan(
                             MembershipPlan(
-                                id = "plan_mbbs_year_1_standard",
-                                name = "MBBS Year 1 Full Pass",
-                                price = 39.99,
+                                id = "plan_all_access_standard",
+                                name = "All Access Full Pass",
+                                price = 49.99,
                                 currency = "USD",
                                 durationDays = 30,
-                                scopeType = "mbbs",
-                                mbbsYear = "Year 1",
-                                scopeMbbsYear = "Year 1",
-                                scopeProgramType = "mbbs",
-                                features = listOf("Full explanations", "Unlimited retakes", "Negative marking mock")
+                                scopeType = "all_access",
+                                scopeId = "all_access",
+                                scopeName = "All Access",
+                                features = listOf("All MBBS Years & Pathways", "All Past Papers & Mocks", "Full Explanations")
                             )
                         )
                     }
@@ -1672,21 +1692,19 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                val trackLabel = if (p.scopeType.equals("mbbs", ignoreCase = true)) {
-                                    val yr = p.mbbsYear.ifBlank { p.scopeMbbsYear }.ifBlank { "All Years" }
-                                    "MBBS: $yr"
-                                } else if (p.scopeType.equals("licensing", ignoreCase = true)) {
-                                    val pw = p.licensingPathway.ifBlank { p.scopeLicensingPathway }.ifBlank { "All Pathways" }
-                                    "Licensing: $pw"
-                                } else {
-                                    "Scope: ${p.scopeType.uppercase()}"
+                                val scopeBadgeText = when (p.scopeType.lowercase()) {
+                                    "all_access" -> "All Access (${p.scopeId})"
+                                    "track" -> "Track: ${p.scopeName.ifBlank { p.scopeId }}"
+                                    "year" -> "Year/Pathway: ${p.scopeName.ifBlank { p.scopeId }}"
+                                    "exam" -> "Exam: ${p.scopeName.ifBlank { p.scopeId }}"
+                                    else -> "Scope: ${p.scopeName.ifBlank { p.scopeId }}"
                                 }
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
                                     color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
                                 ) {
                                     Text(
-                                        text = trackLabel,
+                                        text = scopeBadgeText,
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -1703,9 +1721,9 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
                                         planPrice = p.price.toString()
                                         planCurrency = p.currency
                                         planDuration = p.durationDays.toString()
-                                        selectedTrack = if (p.scopeType.equals("licensing", ignoreCase = true)) "licensing" else "mbbs"
-                                        selectedMbbsYear = p.mbbsYear.ifBlank { p.scopeMbbsYear }.ifBlank { "Year 1" }
-                                        selectedLicensingPathway = p.licensingPathway.ifBlank { p.scopeLicensingPathway }.ifBlank { "NRE" }
+                                        planScope = p.scopeType
+                                        selectedTargetId = p.scopeId
+                                        scopeName = p.scopeName.ifBlank { p.name }
                                         showAddDialog = true
                                     },
                                     modifier = Modifier.testTag("edit_plan_${p.id}")
@@ -1730,9 +1748,15 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
     }
 
     if (showAddDialog) {
-        var trackDropdownExpanded by remember { mutableStateOf(false) }
-        var yearDropdownExpanded by remember { mutableStateOf(false) }
-        var pathwayDropdownExpanded by remember { mutableStateOf(false) }
+        var scopeDropdownExpanded by remember { mutableStateOf(false) }
+        var targetDropdownExpanded by remember { mutableStateOf(false) }
+
+        val scopeOptions = listOf(
+            "all_access" to "All Access",
+            "track" to "Entire Track",
+            "year" to "Specific Year / Pathway",
+            "exam" to "Specific Exam"
+        )
 
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -1749,115 +1773,221 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // 1. Plan Scope Dropdown
+                    Text("Plan Scope *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    val currentScopeLabel = scopeOptions.find { it.first == planScope }?.second ?: "All Access"
+                    ExposedDropdownMenuBox(
+                        expanded = scopeDropdownExpanded,
+                        onExpandedChange = { scopeDropdownExpanded = !scopeDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth().testTag("plan_scope_dropdown")
+                    ) {
+                        OutlinedTextField(
+                            value = currentScopeLabel,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Select Scope") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = scopeDropdownExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = scopeDropdownExpanded,
+                            onDismissRequest = { scopeDropdownExpanded = false }
+                        ) {
+                            scopeOptions.forEach { (scKey, scLabel) ->
+                                DropdownMenuItem(
+                                    text = { Text(scLabel) },
+                                    onClick = {
+                                        planScope = scKey
+                                        scopeDropdownExpanded = false
+                                        when (scKey) {
+                                            "all_access" -> {
+                                                selectedTargetId = "all_access"
+                                                scopeName = "All Access"
+                                                if (planName.isBlank() || planName.contains("Pass")) planName = "All Access Pass"
+                                            }
+                                            "track" -> {
+                                                selectedTargetId = "track_mbbs"
+                                                scopeName = "MBBS Track"
+                                                if (planName.isBlank() || planName.contains("Pass")) planName = "MBBS Track Pass"
+                                            }
+                                            "year" -> {
+                                                selectedTargetId = "mbbs_year_1"
+                                                scopeName = "MBBS Year 1"
+                                                if (planName.isBlank() || planName.contains("Pass")) planName = "MBBS Year 1 Pass"
+                                            }
+                                            "exam" -> {
+                                                val firstEx = allExamsList.firstOrNull()
+                                                val exId = if (firstEx != null) {
+                                                    if (firstEx.id.startsWith("exam_")) firstEx.id else "exam_${firstEx.id}"
+                                                } else "exam_custom"
+                                                selectedTargetId = exId
+                                                scopeName = firstEx?.title ?: "Single Exam"
+                                                if (planName.isBlank() || planName.contains("Pass")) planName = "${scopeName} Pass"
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // 2. Dynamic Target Dropdown
+                    when (planScope) {
+                        "track" -> {
+                            Text("Dynamic Target: Select Track *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            val currentTrackName = trackOptions.find { it.first == selectedTargetId }?.second ?: "MBBS"
+                            ExposedDropdownMenuBox(
+                                expanded = targetDropdownExpanded,
+                                onExpandedChange = { targetDropdownExpanded = !targetDropdownExpanded },
+                                modifier = Modifier.fillMaxWidth().testTag("plan_track_dropdown")
+                            ) {
+                                OutlinedTextField(
+                                    value = currentTrackName,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Target Track") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = targetDropdownExpanded) },
+                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = targetDropdownExpanded,
+                                    onDismissRequest = { targetDropdownExpanded = false }
+                                ) {
+                                    trackOptions.forEach { opt ->
+                                        DropdownMenuItem(
+                                            text = { Text(opt.second) },
+                                            onClick = {
+                                                selectedTargetId = opt.first
+                                                scopeName = "${opt.second} Track"
+                                                if (planName.isBlank() || planName.contains("Pass")) planName = "${opt.second} Track Pass"
+                                                targetDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        "year" -> {
+                            Text("Dynamic Target: Select Academic Year / Pathway *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            val currentYearName = yearPathwayOptions.find { it.first == selectedTargetId }?.second ?: "MBBS Year 1"
+                            ExposedDropdownMenuBox(
+                                expanded = targetDropdownExpanded,
+                                onExpandedChange = { targetDropdownExpanded = !targetDropdownExpanded },
+                                modifier = Modifier.fillMaxWidth().testTag("plan_year_pathway_dropdown")
+                            ) {
+                                OutlinedTextField(
+                                    value = currentYearName,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Target Year / Pathway") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = targetDropdownExpanded) },
+                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = targetDropdownExpanded,
+                                    onDismissRequest = { targetDropdownExpanded = false }
+                                ) {
+                                    yearPathwayOptions.forEach { opt ->
+                                        DropdownMenuItem(
+                                            text = { Text(opt.second) },
+                                            onClick = {
+                                                selectedTargetId = opt.first
+                                                scopeName = opt.second
+                                                if (planName.isBlank() || planName.contains("Pass")) planName = "${opt.second} Pass"
+                                                targetDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        "exam" -> {
+                            Text("Dynamic Target: Select Specific Exam *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            val currentExamTitle = allExamsList.find {
+                                val normalizedId = if (it.id.startsWith("exam_")) it.id else "exam_${it.id}"
+                                normalizedId == selectedTargetId || it.id == selectedTargetId
+                            }?.title ?: scopeName.ifBlank { "Select Exam" }
+
+                            ExposedDropdownMenuBox(
+                                expanded = targetDropdownExpanded,
+                                onExpandedChange = { targetDropdownExpanded = !targetDropdownExpanded },
+                                modifier = Modifier.fillMaxWidth().testTag("plan_exam_target_dropdown")
+                            ) {
+                                OutlinedTextField(
+                                    value = currentExamTitle,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Target Exam") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = targetDropdownExpanded) },
+                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = targetDropdownExpanded,
+                                    onDismissRequest = { targetDropdownExpanded = false }
+                                ) {
+                                    if (allExamsList.isEmpty()) {
+                                        DropdownMenuItem(
+                                            text = { Text("No exams found in Firestore") },
+                                            onClick = { targetDropdownExpanded = false }
+                                        )
+                                    } else {
+                                        allExamsList.forEach { ex ->
+                                            DropdownMenuItem(
+                                                text = { Text(ex.title) },
+                                                onClick = {
+                                                    val normId = if (ex.id.startsWith("exam_")) ex.id else "exam_${ex.id}"
+                                                    selectedTargetId = normId
+                                                    scopeName = ex.title
+                                                    if (planName.isBlank() || planName.contains("Pass")) planName = "${ex.title} Pass"
+                                                    targetDropdownExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            // "all_access" has no dynamic target dropdown needed
+                        }
+                    }
+
+                    // 3. Auto-filled Scope Name & Scope ID preview
+                    OutlinedTextField(
+                        value = scopeName,
+                        onValueChange = { scopeName = it },
+                        label = { Text("Scope Name (Display Label) *") },
+                        placeholder = { Text("e.g. MBBS Year 1, NRE Complete, Past Paper 2023") },
+                        modifier = Modifier.fillMaxWidth().testTag("plan_input_scope_name"),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    ) {
+                        Text(
+                            text = "Unlocks ID: $selectedTargetId",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // Plan Name
                     OutlinedTextField(
                         value = planName,
                         onValueChange = { planName = it },
                         label = { Text("Plan Name *") },
-                        placeholder = { Text(if (selectedTrack == "mbbs") "e.g. MBBS Year 1 Full Access" else "e.g. NRE 30-Day Question Bank") },
-                        modifier = Modifier.fillMaxWidth().testTag("plan_input_name")
+                        placeholder = { Text("e.g. MBBS Year 1 Full Access") },
+                        modifier = Modifier.fillMaxWidth().testTag("plan_input_name"),
+                        shape = RoundedCornerShape(10.dp)
                     )
-
-                    // 1. Track: Dropdown or Segmented control with options [ MBBS ] or [ Licensing Exams ]
-                    Text("Track *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                    ExposedDropdownMenuBox(
-                        expanded = trackDropdownExpanded,
-                        onExpandedChange = { trackDropdownExpanded = !trackDropdownExpanded },
-                        modifier = Modifier.fillMaxWidth().testTag("plan_track_dropdown")
-                    ) {
-                        OutlinedTextField(
-                            value = if (selectedTrack == "mbbs") "MBBS" else "Licensing Exams",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Select Track") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = trackDropdownExpanded) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = trackDropdownExpanded,
-                            onDismissRequest = { trackDropdownExpanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("MBBS") },
-                                onClick = {
-                                    selectedTrack = "mbbs"
-                                    trackDropdownExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Licensing Exams") },
-                                onClick = {
-                                    selectedTrack = "licensing"
-                                    trackDropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
-
-                    // 2. Conditional Field (MBBS): Select Year
-                    if (selectedTrack == "mbbs") {
-                        Text("Select Year *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                        ExposedDropdownMenuBox(
-                            expanded = yearDropdownExpanded,
-                            onExpandedChange = { yearDropdownExpanded = !yearDropdownExpanded },
-                            modifier = Modifier.fillMaxWidth().testTag("plan_mbbs_year_dropdown")
-                        ) {
-                            OutlinedTextField(
-                                value = selectedMbbsYear,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("MBBS Year") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = yearDropdownExpanded) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = yearDropdownExpanded,
-                                onDismissRequest = { yearDropdownExpanded = false }
-                            ) {
-                                mbbsYearsList.forEach { yr ->
-                                    DropdownMenuItem(
-                                        text = { Text(yr) },
-                                        onClick = {
-                                            selectedMbbsYear = yr
-                                            yearDropdownExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // 3. Conditional Field (Licensing): Select Pathway
-                    if (selectedTrack == "licensing") {
-                        Text("Select Pathway *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                        ExposedDropdownMenuBox(
-                            expanded = pathwayDropdownExpanded,
-                            onExpandedChange = { pathwayDropdownExpanded = !pathwayDropdownExpanded },
-                            modifier = Modifier.fillMaxWidth().testTag("plan_licensing_pathway_dropdown")
-                        ) {
-                            OutlinedTextField(
-                                value = selectedLicensingPathway,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Licensing Pathway") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = pathwayDropdownExpanded) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = pathwayDropdownExpanded,
-                                onDismissRequest = { pathwayDropdownExpanded = false }
-                            ) {
-                                licensingPathwaysList.forEach { pw ->
-                                    DropdownMenuItem(
-                                        text = { Text(pw) },
-                                        onClick = {
-                                            selectedLicensingPathway = pw
-                                            pathwayDropdownExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1867,13 +1997,15 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
                             value = planPrice,
                             onValueChange = { planPrice = it },
                             label = { Text("Price") },
-                            modifier = Modifier.weight(1f).testTag("plan_input_price")
+                            modifier = Modifier.weight(1f).testTag("plan_input_price"),
+                            shape = RoundedCornerShape(10.dp)
                         )
                         OutlinedTextField(
                             value = planCurrency,
                             onValueChange = { planCurrency = it },
                             label = { Text("Currency") },
-                            modifier = Modifier.weight(1f).testTag("plan_input_currency")
+                            modifier = Modifier.weight(1f).testTag("plan_input_currency"),
+                            shape = RoundedCornerShape(10.dp)
                         )
                     }
 
@@ -1881,7 +2013,8 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
                         value = planDuration,
                         onValueChange = { planDuration = it },
                         label = { Text("Duration (Days)") },
-                        modifier = Modifier.fillMaxWidth().testTag("plan_input_duration")
+                        modifier = Modifier.fillMaxWidth().testTag("plan_input_duration"),
+                        shape = RoundedCornerShape(10.dp)
                     )
                 }
             },
@@ -1897,12 +2030,9 @@ fun AdminPlansView(viewModel: MedBankViewModel) {
                                     price = planPrice.toDoubleOrNull() ?: 29.99,
                                     currency = planCurrency.trim().ifBlank { "USD" },
                                     durationDays = planDuration.toIntOrNull() ?: 30,
-                                    scopeType = selectedTrack,
-                                    mbbsYear = if (selectedTrack == "mbbs") selectedMbbsYear else "",
-                                    licensingPathway = if (selectedTrack == "licensing") selectedLicensingPathway else "",
-                                    scopeMbbsYear = if (selectedTrack == "mbbs") selectedMbbsYear else "",
-                                    scopeLicensingPathway = if (selectedTrack == "licensing") selectedLicensingPathway else "",
-                                    scopeProgramType = selectedTrack,
+                                    scopeType = planScope,
+                                    scopeId = selectedTargetId,
+                                    scopeName = scopeName.trim().ifBlank { planName.trim() },
                                     features = planToEdit?.features?.ifEmpty { null } ?: listOf(
                                         "Full explanations & clinical rationales",
                                         "Timed mock exams with negative marking",

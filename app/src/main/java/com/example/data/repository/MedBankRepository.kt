@@ -771,6 +771,27 @@ class MedBankRepository(
         awaitClose { reg.remove() }
     }
 
+    fun observeSubjectsByParentType(parentType: String): Flow<List<Subject>> = callbackFlow {
+        val ref = firestore.collection("subjects")
+            .whereEqualTo("parentType", parentType)
+            .whereEqualTo("isActive", true)
+            .orderBy("order")
+        val reg = ref.addSnapshotListener { snapshot, _ ->
+            val list = snapshot?.documents?.map { d ->
+                Subject(
+                    id = d.id,
+                    parentType = d.getString("parentType") ?: parentType,
+                    parentId = d.getString("parentId") ?: "",
+                    name = d.getString("name") ?: "",
+                    order = d.getLong("order")?.toInt() ?: 0,
+                    isActive = true
+                )
+            } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
     fun observeAllSubjects(): Flow<List<Subject>> = callbackFlow {
         val ref = firestore.collection("subjects").orderBy("name")
         val reg = ref.addSnapshotListener { snapshot, _ ->
@@ -868,10 +889,46 @@ class MedBankRepository(
         val ref = firestore.collection("exams")
             .whereEqualTo("subjectId", subjectId)
             .whereEqualTo("isPublished", true)
-            .orderBy("createdAt")
         val reg = ref.addSnapshotListener { snapshot, _ ->
-            val list = snapshot?.documents?.mapNotNull { d -> firestoreDocToExam(d) } ?: emptyList()
+            val list = snapshot?.documents?.mapNotNull { d -> firestoreDocToExam(d) }?.sortedByDescending { it.createdAt } ?: emptyList()
             trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    fun observePublishedExamsByParentType(parentType: String): Flow<List<Exam>> = callbackFlow {
+        val ref = firestore.collection("exams")
+            .whereEqualTo("parentType", parentType)
+            .whereEqualTo("isPublished", true)
+        val reg = ref.addSnapshotListener { snapshot, _ ->
+            val list = snapshot?.documents?.mapNotNull { d -> firestoreDocToExam(d) }?.sortedByDescending { it.createdAt } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    fun observePublishedExamsByParent(parentType: String, parentId: String): Flow<List<Exam>> = callbackFlow {
+        val ref = firestore.collection("exams")
+            .whereEqualTo("parentType", parentType)
+            .whereEqualTo("parentId", parentId)
+            .whereEqualTo("isPublished", true)
+        val reg = ref.addSnapshotListener { snapshot, _ ->
+            val list = snapshot?.documents?.mapNotNull { d -> firestoreDocToExam(d) }?.sortedByDescending { it.createdAt } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    fun observeExamsForSubjectOrParent(subject: Subject): Flow<List<Exam>> = callbackFlow {
+        val ref = firestore.collection("exams").whereEqualTo("isPublished", true)
+        val reg = ref.addSnapshotListener { snapshot, _ ->
+            val all = snapshot?.documents?.mapNotNull { d -> firestoreDocToExam(d) } ?: emptyList()
+            val filtered = all.filter { ex ->
+                ex.subjectId == subject.id ||
+                ex.parentId == subject.id ||
+                (ex.parentType == subject.parentType && (ex.parentId == subject.parentId || subject.parentId == "all" || subject.parentId.isBlank()))
+            }.sortedByDescending { it.createdAt }
+            trySend(filtered)
         }
         awaitClose { reg.remove() }
     }
@@ -1496,8 +1553,23 @@ class MedBankRepository(
                     "expiresAt" to expiresAt,
                     "status" to "active"
                 )
+                var effectiveScopeId = req.scopeId
+                if (overridePlan != null && overridePlan.scopeId.isNotBlank()) {
+                    effectiveScopeId = overridePlan.scopeId
+                } else if (grantedPlanId.isNotBlank()) {
+                    try {
+                        val planSnap = firestore.collection("membershipPlans").document(grantedPlanId).get().await()
+                        if (planSnap.exists()) {
+                            val scId = planSnap.getString("scopeId")
+                            if (!scId.isNullOrBlank()) {
+                                effectiveScopeId = scId
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+
                 firestore.collection("users").document(req.uid).update(
-                    "entitlements.${req.scopeId}", entData
+                    "entitlements.$effectiveScopeId", entData
                 ).await()
 
                 // Check if student was referred by another user
@@ -1783,89 +1855,105 @@ class MedBankRepository(
         awaitClose { reg.remove() }
     }
 
-    suspend fun getPlansForExamTrack(parentType: String, parentId: String): List<MembershipPlan> {
+    suspend fun getPlansForExam(exam: Exam): List<MembershipPlan> {
         return try {
-            val isMbbs = parentType.equals("mbbsYear", ignoreCase = true) || parentType.equals("mbbs", ignoreCase = true)
-            val scopeType = if (isMbbs) "mbbs" else "licensing"
-            val fieldName = if (isMbbs) "mbbsYear" else "licensingPathway"
-
-            // 1. Direct query matching active plans by scopeType and fieldName as specified
             val snap = firestore.collection("membershipPlans")
                 .whereEqualTo("isActive", true)
-                .whereEqualTo("scopeType", scopeType)
-                .whereEqualTo(fieldName, parentId)
                 .get()
                 .await()
+            val allPlans = snap.documents.mapNotNull { firestoreDocToPlan(it) }
 
-            var plans = snap.documents.mapNotNull { firestoreDocToPlan(it) }
+            val examScopeIds = setOf(
+                "exam_${exam.id}",
+                exam.id
+            )
+            val parentScopeIds = setOf(
+                exam.parentId,
+                "${exam.parentType}_${exam.parentId}",
+                if (exam.parentId.startsWith("year_")) "mbbs_${exam.parentId}" else "",
+                if (exam.parentType == "mbbs" && !exam.parentId.startsWith("mbbs_")) "mbbs_${exam.parentId}" else "",
+                if (exam.parentType == "licensing" && !exam.parentId.startsWith("licensing_")) "licensing_${exam.parentId}" else ""
+            ).filter { it.isNotBlank() }.toSet()
 
-            // 2. If no direct match, check formatting variants (e.g. "year_1" vs "Year 1" or "nre" vs "NRE")
-            if (plans.isEmpty()) {
-                val altId = if (isMbbs) {
-                    if (parentId.startsWith("year_", ignoreCase = true)) {
-                        "Year " + parentId.substringAfter("year_")
-                    } else if (parentId.startsWith("Year ", ignoreCase = true)) {
-                        "year_" + parentId.substringAfter("Year ")
-                    } else {
-                        "Year $parentId"
-                    }
-                } else {
-                    if (parentId == parentId.uppercase()) parentId.lowercase() else parentId.uppercase()
-                }
+            val trackScopeIds = setOf(
+                "track_${exam.parentType}",
+                exam.parentType,
+                "track_${exam.parentType.removePrefix("track_")}"
+            )
 
-                if (altId != parentId) {
-                    val altSnap = firestore.collection("membershipPlans")
-                        .whereEqualTo("isActive", true)
-                        .whereEqualTo("scopeType", scopeType)
-                        .whereEqualTo(fieldName, altId)
-                        .get()
-                        .await()
-                    plans = altSnap.documents.mapNotNull { firestoreDocToPlan(it) }
-                }
-            }
-
-            // 3. Strict fallback check within this scopeType only (case-insensitive/digit match)
-            if (plans.isEmpty()) {
-                val scopeSnap = firestore.collection("membershipPlans")
-                    .whereEqualTo("isActive", true)
-                    .whereEqualTo("scopeType", scopeType)
-                    .get()
-                    .await()
-                val scopePlans = scopeSnap.documents.mapNotNull { firestoreDocToPlan(it) }
-                plans = scopePlans.filter { plan ->
-                    if (isMbbs) {
-                        val py = plan.mbbsYear.ifBlank { plan.scopeMbbsYear }
-                        py.equals(parentId, ignoreCase = true) ||
-                            (py.filter { it.isDigit() }.isNotEmpty() &&
-                             py.filter { it.isDigit() } == parentId.filter { it.isDigit() })
-                    } else {
-                        val pp = plan.licensingPathway.ifBlank { plan.scopeLicensingPathway }
-                        pp.equals(parentId, ignoreCase = true)
+            allPlans.filter { plan ->
+                when (plan.scopeType.lowercase()) {
+                    "all_access", "all" -> true
+                    "exam" -> examScopeIds.contains(plan.scopeId) || plan.scopeId == exam.id
+                    "year", "pathway" -> parentScopeIds.contains(plan.scopeId) ||
+                            (exam.parentType == "mbbs" && (plan.mbbsYear.equals(exam.parentId, true) || plan.scopeMbbsYear.equals(exam.parentId, true))) ||
+                            (exam.parentType == "licensing" && (plan.licensingPathway.equals(exam.parentId, true) || plan.scopeLicensingPathway.equals(exam.parentId, true)))
+                    "track" -> trackScopeIds.contains(plan.scopeId) || plan.scopeId.contains(exam.parentType, ignoreCase = true)
+                    else -> {
+                        plan.scopeId == "all_access" ||
+                        examScopeIds.contains(plan.scopeId) ||
+                        parentScopeIds.contains(plan.scopeId) ||
+                        trackScopeIds.contains(plan.scopeId) ||
+                        exam.accessPlanIds.contains(plan.id)
                     }
                 }
-            }
-
-            // Strictly return only matching plans. Do NOT return fallback or unrelated plans!
-            plans
+            }.sortedBy { it.order }
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching plans: ${e.message}")
             emptyList()
         }
     }
 
+    suspend fun getPlansForExamTrack(parentType: String, parentId: String): List<MembershipPlan> {
+        return getPlansForExam(Exam(id = "", parentType = parentType, parentId = parentId))
+    }
+
     private fun firestoreDocToPlan(d: com.google.firebase.firestore.DocumentSnapshot): MembershipPlan? {
         if (!d.exists()) return null
         val mbbsYear = d.getString("mbbsYear") ?: d.getString("scopeMbbsYear") ?: ""
         val licensingPathway = d.getString("licensingPathway") ?: d.getString("scopeLicensingPathway") ?: ""
-        val scopeType = d.getString("scopeType") ?: d.getString("scopeProgramType") ?: "all"
+        val rawScopeType = d.getString("scopeType") ?: d.getString("scopeProgramType") ?: "all_access"
+        val normalizedScopeType = when (rawScopeType.lowercase()) {
+            "all", "all_access" -> "all_access"
+            "mbbs", "licensing" -> "year"
+            else -> rawScopeType.lowercase()
+        }
+        val storedScopeId = d.getString("scopeId") ?: ""
+        val scopeId = if (storedScopeId.isNotBlank()) {
+            storedScopeId
+        } else {
+            when (normalizedScopeType) {
+                "all_access" -> "all_access"
+                "track" -> "track_${d.getString("scopeProgramType") ?: rawScopeType}"
+                "year" -> {
+                    if (mbbsYear.isNotBlank()) "mbbs_${mbbsYear.lowercase().replace(" ", "_")}"
+                    else if (licensingPathway.isNotBlank()) "licensing_${licensingPathway.lowercase()}"
+                    else ""
+                }
+                else -> ""
+            }
+        }
+        val storedScopeName = d.getString("scopeName") ?: ""
+        val scopeName = if (storedScopeName.isNotBlank()) {
+            storedScopeName
+        } else {
+            when (normalizedScopeType) {
+                "all_access" -> "All Access Pass"
+                "track" -> "${(d.getString("scopeProgramType") ?: rawScopeType).uppercase()} Track"
+                "year" -> mbbsYear.ifBlank { licensingPathway }
+                else -> d.getString("name") ?: ""
+            }
+        }
         return MembershipPlan(
             id = d.id,
             name = d.getString("name") ?: "",
             price = d.getDouble("price") ?: (d.getLong("price")?.toDouble() ?: 0.0),
             currency = d.getString("currency") ?: "USD",
             durationDays = d.getLong("durationDays")?.toInt() ?: 30,
-            scopeType = scopeType,
-            scopeProgramType = d.getString("scopeProgramType") ?: scopeType,
+            scopeType = normalizedScopeType,
+            scopeId = scopeId,
+            scopeName = scopeName,
+            scopeProgramType = d.getString("scopeProgramType") ?: rawScopeType,
             scopeMbbsYear = mbbsYear,
             scopeLicensingPathway = licensingPathway,
             mbbsYear = mbbsYear,
@@ -1884,11 +1972,13 @@ class MedBankRepository(
             "currency" to plan.currency,
             "durationDays" to plan.durationDays,
             "scopeType" to plan.scopeType,
-            "mbbsYear" to (if (plan.scopeType == "mbbs") plan.mbbsYear else ""),
-            "licensingPathway" to (if (plan.scopeType == "licensing") plan.licensingPathway else ""),
-            "scopeMbbsYear" to (if (plan.scopeType == "mbbs") plan.mbbsYear else ""),
-            "scopeLicensingPathway" to (if (plan.scopeType == "licensing") plan.licensingPathway else ""),
-            "scopeProgramType" to plan.scopeType,
+            "scopeId" to plan.scopeId,
+            "scopeName" to plan.scopeName,
+            "mbbsYear" to (if (plan.scopeType == "year" && plan.mbbsYear.isNotBlank()) plan.mbbsYear else ""),
+            "licensingPathway" to (if (plan.scopeType == "year" && plan.licensingPathway.isNotBlank()) plan.licensingPathway else ""),
+            "scopeMbbsYear" to (if (plan.scopeType == "year" && plan.mbbsYear.isNotBlank()) plan.mbbsYear else ""),
+            "scopeLicensingPathway" to (if (plan.scopeType == "year" && plan.licensingPathway.isNotBlank()) plan.licensingPathway else ""),
+            "scopeProgramType" to plan.scopeProgramType,
             "scopeIds" to plan.scopeIds,
             "features" to plan.features,
             "isActive" to plan.isActive,
@@ -1903,6 +1993,8 @@ class MedBankRepository(
                 currency = plan.currency,
                 durationDays = plan.durationDays,
                 scopeType = plan.scopeType,
+                scopeId = plan.scopeId,
+                scopeName = plan.scopeName,
                 scopeIdsJson = listToJson(plan.scopeIds),
                 featuresJson = listToJson(plan.features),
                 isActive = plan.isActive,

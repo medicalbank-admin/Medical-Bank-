@@ -104,6 +104,9 @@ interface MedBankDao {
     @Query("SELECT * FROM subjects WHERE parentType = :parentType AND parentId = :parentId AND isActive = 1 ORDER BY orderIndex ASC")
     fun observeSubjectsByParent(parentType: String, parentId: String): Flow<List<SubjectEntity>>
 
+    @Query("SELECT * FROM subjects WHERE parentType = :parentType AND isActive = 1 ORDER BY orderIndex ASC")
+    fun observeSubjectsByParentType(parentType: String): Flow<List<SubjectEntity>>
+
     @Query("SELECT * FROM subjects WHERE parentType = :parentType AND parentId = :parentId ORDER BY orderIndex ASC")
     fun observeAllSubjectsByParent(parentType: String, parentId: String): Flow<List<SubjectEntity>>
 
@@ -122,6 +125,12 @@ interface MedBankDao {
     // --- Exams ---
     @Query("SELECT * FROM exams WHERE subjectId = :subjectId AND isPublished = 1 ORDER BY createdAt DESC")
     fun observePublishedExamsBySubject(subjectId: String): Flow<List<ExamEntity>>
+
+    @Query("SELECT * FROM exams WHERE parentType = :parentType AND isPublished = 1 ORDER BY createdAt DESC")
+    fun observePublishedExamsByParentType(parentType: String): Flow<List<ExamEntity>>
+
+    @Query("SELECT * FROM exams WHERE parentType = :parentType AND parentId = :parentId AND isPublished = 1 ORDER BY createdAt DESC")
+    fun observePublishedExamsByParent(parentType: String, parentId: String): Flow<List<ExamEntity>>
 
     @Query("SELECT * FROM exams WHERE subjectId = :subjectId ORDER BY createdAt DESC")
     fun observeAllExamsBySubject(subjectId: String): Flow<List<ExamEntity>>

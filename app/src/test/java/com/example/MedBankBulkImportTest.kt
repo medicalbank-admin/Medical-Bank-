@@ -43,12 +43,15 @@ class FakeDao : MedBankDao {
     override suspend fun insertPathway(pathway: LicensingPathwayEntity) {}
     override suspend fun deletePathway(pathway: LicensingPathwayEntity) {}
     override fun observeSubjectsByParent(parentType: String, parentId: String): Flow<List<SubjectEntity>> = emptyFlow()
+    override fun observeSubjectsByParentType(parentType: String): Flow<List<SubjectEntity>> = emptyFlow()
     override fun observeAllSubjectsByParent(parentType: String, parentId: String): Flow<List<SubjectEntity>> = emptyFlow()
     override suspend fun getSubjectById(id: String): SubjectEntity? = null
     override fun observeAllSubjects(): Flow<List<SubjectEntity>> = emptyFlow()
     override suspend fun insertSubject(subject: SubjectEntity) {}
     override suspend fun deleteSubject(subject: SubjectEntity) {}
     override fun observePublishedExamsBySubject(subjectId: String): Flow<List<ExamEntity>> = emptyFlow()
+    override fun observePublishedExamsByParentType(parentType: String): Flow<List<ExamEntity>> = emptyFlow()
+    override fun observePublishedExamsByParent(parentType: String, parentId: String): Flow<List<ExamEntity>> = emptyFlow()
     override fun observeAllExamsBySubject(subjectId: String): Flow<List<ExamEntity>> = emptyFlow()
     override fun observeAllExams(): Flow<List<ExamEntity>> = emptyFlow()
     override suspend fun getExamById(id: String): ExamEntity? = null

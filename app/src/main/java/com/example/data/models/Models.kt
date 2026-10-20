@@ -130,7 +130,9 @@ data class MembershipPlan(
     val price: Double = 0.0,
     val currency: String = "USD",
     val durationDays: Int = 30,
-    val scopeType: String = "all", // "all", "mbbs", "licensing", "pathway", "year", "exam"
+    val scopeType: String = "all_access", // Allowed values: "all_access", "track", "year", "exam"
+    val scopeId: String = "", // The exact ID this plan unlocks (e.g., "all_access", "track_mbbs", "mbbs_year_1", "exam_e8fbea4f")
+    val scopeName: String = "", // Human-readable (e.g., "All Access", "MBBS Track", "MBBS Year 1", "NRE Complete", "Past Paper 2023")
     val scopeProgramType: String = "",
     val scopeMbbsYear: String = "",
     val scopeLicensingPathway: String = "",
