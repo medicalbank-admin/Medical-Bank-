@@ -363,14 +363,26 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
             )
         }
     }
-
+fun refreshCurrentUserProfile() {
+    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
+    viewModelScope.launch {
+        val updated = repository.getUserByUid(uid)
+        if (updated != null && updated.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid) {
+            _currentUser.value = updated
+        }
+    }
+}
     fun logout() {
-        _currentUser.value = null
-        _activeTab.value = ScreenTab.EXPLORER
-        _selectedParentId.value = null
-        _selectedSubject.value = null
-        _playerState.value = ExamPlayerState()
-        _reviewData.value = null
+    _currentUser.value = null
+    _activeTab.value = ScreenTab.EXPLORER
+    _selectedParentId.value = null
+    _selectedSubject.value = null
+    _playerState.value = ExamPlayerState()
+    _reviewData.value = null
+    
+    // Add these two lines to prevent data leaking between user sessions:
+    _pendingAccessRequests.value = emptySet()
+    _userResults.value = emptyList()
     }
 
     // --- Content Navigation ---
