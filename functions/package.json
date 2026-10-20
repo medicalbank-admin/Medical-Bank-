@@ -1,92 +1,25 @@
 {
-  "project_info": {
-    "project_number": "45998972617",
-    "project_id": "gen-lang-client-0656794943",
-    "storage_bucket": "gen-lang-client-0656794943.firebasestorage.app"
+  "name": "functions",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
   },
-  "client": [
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:45998972617:android:9356a8908ad8c742453718",
-        "android_client_info": {
-          "package_name": "com.aistudio.medbank.qmbx"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "45998972617-2a8jh3ug8cf71tch1m2ivq5jlbnoodn3.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.aistudio.medbank.qmbx",
-            "certificate_hash": "6b7d0a1e78dda0f5cf6463a9d9126c390756d28f"
-          }
-        },
-        {
-          "client_id": "45998972617-gek45e01am8cguqhjpp66f2dqjgug5ce.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyALbSA_HutXJMlONcQb9HkIZJOvks8zBAg"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "45998972617-gek45e01am8cguqhjpp66f2dqjgug5ce.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:45998972617:android:03f374bb348fa32e453718",
-        "android_client_info": {
-          "package_name": "pk.medicalbank.app"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "45998972617-4j2fpu1nm0aouhrv3r3r95hq1d4fo7gf.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "pk.medicalbank.app",
-            "certificate_hash": "83c75c42af88e9365447fb4d011dd0af9436d172"
-          }
-        },
-        {
-          "client_id": "45998972617-m8d2hoanmv1skl7rdjtv56vhnbd8jr30.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "pk.medicalbank.app",
-            "certificate_hash": "6b7d0a1e78dda0f5cf6463a9d9126c390756d28f"
-          }
-        },
-        {
-          "client_id": "45998972617-gek45e01am8cguqhjpp66f2dqjgug5ce.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyALbSA_HutXJMlONcQb9HkIZJOvks8zBAg"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "45998972617-gek45e01am8cguqhjpp66f2dqjgug5ce.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
-        }
-      }
-    }
-  ],
-  "configuration_version": "1"
+  "engines": {
+    "node": "18"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "firebase-admin": "^11.8.0",
+    "firebase-functions": "^4.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.0",
+    "firebase-functions-test": "^3.1.0"
+  },
+  "private": true
 }
