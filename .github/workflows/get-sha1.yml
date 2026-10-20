@@ -1,0 +1,10 @@
+name: Get SHA1
+on: workflow_dispatch
+jobs:
+  get-sha1:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decode Keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
+      - name: Print SHA1
+        run: keytool -list -v -keystore release.keystore -alias release -storepass ${{ secrets.KEYSTORE_PASSWORD }} -keypass ${{ secrets.KEYSTORE_PASSWORD }}
