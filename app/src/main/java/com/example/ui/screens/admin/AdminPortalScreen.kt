@@ -829,7 +829,7 @@ fun AdminContentView(viewModel: MedBankViewModel) {
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "One-click generate standard folders for MBBS (Years 1 to 6) and Licensing Pathways (NRE, FCPS, USMLE, PLAB, DHA, SMLE).",
+                    "One-click generate standard folders for MBBS (Years 1 to 6), Licensing Pathways, Past Papers, and Mock Exams.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
@@ -1018,6 +1018,131 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
                     )
                 }
             }
+
+
+        @OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdminBulkImportView(viewModel: MedBankViewModel) {
+    val coroutineScope = rememberCoroutineScope()
+
+    var selectedProgram by remember { mutableStateOf("mbbs") } // "mbbs", "licensing", "past_papers", "mock_exams"
+    var selectedParentId by remember { mutableStateOf("year_1") }
+
+    val mbbsYears = listOf(
+        "year_1" to "Year 1", "year_2" to "Year 2", "year_3" to "Year 3",
+        "year_4" to "Year 4", "year_5" to "Year 5", "year_6" to "Year 6"
+    )
+
+    val licensingPathways = listOf(
+        "nre" to "NRE", "fcps" to "FCPS", "usmle" to "USMLE",
+        "plab" to "PLAB", "dha" to "DHA", "smle" to "SMLE"
+    )
+
+    val pastPapersFolders = listOf(
+        "pp_mbbs" to "MBBS Professional Past Papers",
+        "pp_licensing" to "Licensing & FCPS Past Papers",
+        "pp_annual" to "Annual & Supplementary Papers",
+        "pp_specialty" to "Specialty Clinical Papers"
+    )
+
+    val mockExamsFolders = listOf(
+        "mock_grand" to "Full-Length Grand Mocks",
+        "mock_clinical" to "Clinical Vignette Mocks",
+        "mock_timed" to "High-Yield Timed Mocks",
+        "mock_rapid" to "Rapid Revision Mocks"
+    )
+
+    var subjectsList by remember { mutableStateOf<List<Subject>>(emptyList()) }
+    var selectedSubjectId by remember { mutableStateOf<String?>(null) }
+
+    var examsList by remember { mutableStateOf<List<Exam>>(emptyList()) }
+    var selectedExamId by remember { mutableStateOf<String?>(null) }
+
+    var importMode by remember { mutableStateOf("append") }
+    var advancedMode by remember { mutableStateOf(false) }
+
+    val sampleQTemplate = remember {
+        "Q|What is the primary treatment for acute anaphylaxis?|Epinephrine intramuscular|Intravenous diphenhydramine|Albuterol nebulizer|Methylprednisolone intravenous|A|Epinephrine is the first-line and life-saving treatment for anaphylaxis.|high|emergency;allergy"
+    }
+
+    var importText by remember { mutableStateOf(sampleQTemplate) }
+    var parseResult by remember { mutableStateOf<BulkImportResult?>(null) }
+    var successSnackbar by remember { mutableStateOf<String?>(null) }
+
+    var showCreateSubjDialog by remember { mutableStateOf(false) }
+    var newSubjName by remember { mutableStateOf("") }
+
+    var showCreateExamDialog by remember { mutableStateOf(false) }
+    var newExamTitle by remember { mutableStateOf("") }
+    var newExamDuration by remember { mutableStateOf("60") }
+    var newExamMarks by remember { mutableStateOf("100") }
+    var newExamNegative by remember { mutableStateOf("0.25") }
+    var newExamAttempts by remember { mutableStateOf("1") }
+    var newExamPublished by remember { mutableStateOf(true) }
+    var allPlans by remember { mutableStateOf<List<MembershipPlan>>(emptyList()) }
+    var selectedPlanIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    LaunchedEffect(selectedProgram, selectedParentId) {
+        val subs = viewModel.repository.getSubjectsByParent(selectedProgram, selectedParentId)
+        subjectsList = subs
+        selectedSubjectId = subs.firstOrNull()?.id
+    }
+
+    LaunchedEffect(selectedSubjectId) {
+        if (selectedSubjectId != null) {
+            val exms = viewModel.repository.getExamsBySubject(selectedSubjectId!!)
+            examsList = exms
+            selectedExamId = exms.firstOrNull()?.id
+        } else {
+            examsList = emptyList()
+            selectedExamId = null
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        allPlans = viewModel.repository.getAllPlans()
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text("Bulk Question Import", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+        // STEP 1: Program Segmented Control / Chips
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text("Step 1: Select Program", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), 
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedProgram == "mbbs",
+                        onClick = { selectedProgram = "mbbs"; selectedParentId = "year_1"; parseResult = null },
+                        label = { Text("MBBS") }
+                    )
+                    FilterChip(
+                        selected = selectedProgram == "licensing",
+                        onClick = { selectedProgram = "licensing"; selectedParentId = "nre"; parseResult = null },
+                        label = { Text("Licensing") }
+                    )
+                    FilterChip(
+                        selected = selectedProgram == "past_papers",
+                        onClick = { selectedProgram = "past_papers"; selectedParentId = "pp_mbbs"; parseResult = null },
+                        label = { Text("Past Papers") }
+                    )
+                    FilterChip(
+                        selected = selectedProgram == "mock_exams",
+                        onClick = { selectedProgram = "mock_exams"; selectedParentId = "mock_grand"; parseResult = null },
+                        label = { Text("Mock Exams") }
+                    )
+                }
+            }
         }
 
         // STEP 2: Year or Pathway Dropdown
@@ -1027,12 +1152,24 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
-                    text = if (selectedProgram == "mbbs") "Step 2: Select Academic Year" else "Step 2: Select Licensing Pathway",
+                    text = when(selectedProgram) {
+                        "mbbs" -> "Step 2: Select Academic Year"
+                        "licensing" -> "Step 2: Select Licensing Pathway"
+                        "past_papers" -> "Step 2: Select Past Paper Folder"
+                        "mock_exams" -> "Step 2: Select Mock Exam Folder"
+                        else -> "Step 2: Select Target"
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                val options = if (selectedProgram == "mbbs") mbbsYears else licensingPathways
+                val options = when (selectedProgram) {
+                    "mbbs" -> mbbsYears
+                    "licensing" -> licensingPathways
+                    "past_papers" -> pastPapersFolders
+                    "mock_exams" -> mockExamsFolders
+                    else -> mbbsYears
+                }
                 var expandedParent by remember { mutableStateOf(false) }
                 val currentParentName = options.find { it.first == selectedParentId }?.second ?: selectedParentId
 
@@ -1118,7 +1255,6 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
                 }
             }
         }
-
         // STEP 4: Exam Dropdown & + Create new exam
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -1186,18 +1322,12 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text("Step 5: Import Mode", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().clickable { importMode = "append" },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.fillMaxWidth().clickable { importMode = "append" }, verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = importMode == "append", onClick = { importMode = "append" })
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Append to existing questions")
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().clickable { importMode = "replace" },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.fillMaxWidth().clickable { importMode = "replace" }, verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = importMode == "replace", onClick = { importMode = "replace" })
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Replace all questions in this exam")
@@ -1205,19 +1335,9 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
             }
         }
 
-        // Empty state prompt if needed
         if (subjectsList.isEmpty() || examsList.isEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f))
-            ) {
-                Text(
-                    text = "Prompt: Create a subject and exam first, or use the Content Manager.",
-                    modifier = Modifier.padding(14.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    fontWeight = FontWeight.Bold
-                )
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f))) {
+                Text("Prompt: Create a subject and exam first, or use the Content Manager.", modifier = Modifier.padding(14.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -1230,61 +1350,38 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Step 6: Paste Questions", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     TextButton(onClick = {
-                        importText = if (advancedMode) {
-                            "EXAM|Mock Exam|Cardiology|mbbs|year_3|60|100|0.25||published\n$sampleQTemplate"
-                        } else {
-                            sampleQTemplate
-                        }
+                        importText = if (advancedMode) "EXAM|Mock Exam|Cardiology|mbbs|year_3|60|100|0.25||published\n$sampleQTemplate" else sampleQTemplate
                         parseResult = null
-                    }) {
-                        Text("Load Sample", color = MaterialTheme.colorScheme.primary)
-                    }
+                    }) { Text("Load Sample", color = MaterialTheme.colorScheme.primary) }
                 }
                 Text(
-                    text = if (advancedMode)
-                        "Advanced Mode: Line 1: EXAM|title|subject|parentType|parentId|duration|marks|negative|plan|status\nFollowing lines: Q|text|opt1|opt2|opt3|opt4|correct|explanation|difficulty|tags"
-                    else
-                        "Format: Q|text|opt1|opt2|opt3|opt4|correctIndex (A/B/C/D or 0/3)|explanation|difficulty|tags",
+                    text = if (advancedMode) "Advanced Mode: Line 1: EXAM|title|subject|parentType|parentId|duration|marks|negative|plan|status\nFollowing lines: Q|text|opt1|opt2|opt3|opt4|correct|explanation|difficulty|tags" else "Format: Q|text|opt1|opt2|opt3|opt4|correctIndex (A/B/C/D or 0/3)|explanation|difficulty|tags",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = importText,
-                    onValueChange = {
-                        importText = it
-                        parseResult = null
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .testTag("bulk_import_textfield"),
+                    onValueChange = { importText = it; parseResult = null },
+                    modifier = Modifier.fillMaxWidth().height(200.dp).testTag("bulk_import_textfield"),
                     shape = RoundedCornerShape(10.dp),
                     placeholder = { Text(sampleQTemplate) }
                 )
             }
         }
 
-        // Advanced Mode Toggle
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable { advancedMode = !advancedMode },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.fillMaxWidth().clickable { advancedMode = !advancedMode }, verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = advancedMode, onCheckedChange = { advancedMode = it })
             Spacer(modifier = Modifier.width(8.dp))
             Text("Advanced mode — paste full EXAM metadata line", style = MaterialTheme.typography.bodySmall)
         }
 
-        // STEP 7: Actions (Preview & Commit)
+        // STEP 7: Actions
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             Button(
                 onClick = {
-                    if (advancedMode) {
-                        parseResult = viewModel.repository.parseBulkImport(importText)
-                    } else {
-                        val examId = selectedExamId ?: "temp_exam"
-                        parseResult = viewModel.repository.parseContextBulkImport(importText, examId)
-                    }
+                    if (advancedMode) parseResult = viewModel.repository.parseBulkImport(importText)
+                    else parseResult = viewModel.repository.parseContextBulkImport(importText, selectedExamId ?: "temp_exam")
                 },
                 enabled = selectedExamId != null || advancedMode,
                 shape = RoundedCornerShape(10.dp),
@@ -1302,19 +1399,9 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
                     coroutineScope.launch {
                         val res = parseResult!!
                         if (advancedMode) {
-                            viewModel.repository.commitBulkImport(
-                                exam = res.exam!!,
-                                subjectName = "General",
-                                questions = res.questions,
-                                answers = res.answers
-                            )
+                            viewModel.repository.commitBulkImport(exam = res.exam!!, subjectName = "General", questions = res.questions, answers = res.answers)
                         } else {
-                            viewModel.repository.commitContextBulkImport(
-                                examId = selectedExamId!!,
-                                questions = res.questions,
-                                answers = res.answers,
-                                replaceMode = importMode == "replace"
-                            )
+                            viewModel.repository.commitContextBulkImport(examId = selectedExamId!!, questions = res.questions, answers = res.answers, replaceMode = importMode == "replace")
                         }
                         val examTitle = if (advancedMode) res.exam?.title else examsList.find { it.id == selectedExamId }?.title ?: "Exam"
                         successSnackbar = "Successfully Imported ${res.questions.size} questions into $examTitle"
@@ -1334,58 +1421,31 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
             }
         }
 
-        // Success Feedback
         if (successSnackbar != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-            ) {
-                Text(
-                    text = successSnackbar!!,
-                    modifier = Modifier.padding(14.dp),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold
-                )
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                Text(text = successSnackbar!!, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
             }
         }
 
-        // Preview Table & Validation Errors
         if (parseResult != null) {
             val res = parseResult!!
             if (!res.success) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text("Validation Errors Found:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
                         Spacer(modifier = Modifier.height(4.dp))
-                        res.errors.forEach { err ->
-                            Text("• $err", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                        }
+                        res.errors.forEach { err -> Text("• $err", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer) }
                     }
                 }
             } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text("Validation Passed! Preview Table (${res.questions.size} questions):", fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(8.dp))
                         res.questions.take(15).forEachIndexed { index, q ->
                             val ans = res.answers.getOrNull(index)
-                            val correctChar = when (ans?.correctIndex) {
-                                0 -> "A"
-                                1 -> "B"
-                                2 -> "C"
-                                3 -> "D"
-                                else -> "?"
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
+                            val correctChar = when (ans?.correctIndex) { 0 -> "A"; 1 -> "B"; 2 -> "C"; 3 -> "D"; else -> "?" }
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("#${q.order}", fontWeight = FontWeight.Bold, modifier = Modifier.width(30.dp))
                                 Text(q.text.take(50) + "...", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                                 Text(" Ans: $correctChar ", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -1419,7 +1479,7 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
                     onClick = {
                         if (newSubjName.isNotBlank()) {
                             coroutineScope.launch {
-                                val newId = "subj_${newSubjName.lowercase().replace(" ", "_")}_${java.util.UUID.randomUUID().toString().take(4)}"
+                                val newId = "subj_${newSubjName.lowercase().replace(" ", "_")}_${UUID.randomUUID().toString().take(4)}"
                                 val subject = Subject(
                                     id = newId,
                                     parentType = selectedProgram,
@@ -1436,15 +1496,9 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
                             }
                         }
                     }
-                ) {
-                    Text("Create")
-                }
+                ) { Text("Create") }
             },
-            dismissButton = {
-                TextButton(onClick = { showCreateSubjDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+            dismissButton = { TextButton(onClick = { showCreateSubjDialog = false }) { Text("Cancel") } }
         )
     }
 
@@ -1454,66 +1508,25 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
             onDismissRequest = { showCreateExamDialog = false },
             title = { Text("Create New Exam") },
             text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedTextField(
-                        value = newExamTitle,
-                        onValueChange = { newExamTitle = it },
-                        label = { Text("Exam Title") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newExamDuration,
-                        onValueChange = { newExamDuration = it },
-                        label = { Text("Duration (minutes)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newExamMarks,
-                        onValueChange = { newExamMarks = it },
-                        label = { Text("Total Marks") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newExamNegative,
-                        onValueChange = { newExamNegative = it },
-                        label = { Text("Negative Marking (e.g. 0.25)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newExamAttempts,
-                        onValueChange = { newExamAttempts = it },
-                        label = { Text("Max Attempts (1, 2, or 3)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(value = newExamTitle, onValueChange = { newExamTitle = it }, label = { Text("Exam Title") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = newExamDuration, onValueChange = { newExamDuration = it }, label = { Text("Duration (minutes)") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = newExamMarks, onValueChange = { newExamMarks = it }, label = { Text("Total Marks") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = newExamNegative, onValueChange = { newExamNegative = it }, label = { Text("Negative Marking (e.g. 0.25)") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = newExamAttempts, onValueChange = { newExamAttempts = it }, label = { Text("Max Attempts (1, 2, or 3)") }, modifier = Modifier.fillMaxWidth())
+                    
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("Published")
                         Switch(checked = newExamPublished, onCheckedChange = { newExamPublished = it })
                     }
                     Text("Access Plans (Optional):", style = MaterialTheme.typography.labelMedium)
                     allPlans.forEach { plan ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                selectedPlanIds = if (selectedPlanIds.contains(plan.id)) {
-                                    selectedPlanIds - plan.id
-                                } else {
-                                    selectedPlanIds + plan.id
-                                }
-                            },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = selectedPlanIds.contains(plan.id),
-                                onCheckedChange = { checked ->
-                                    selectedPlanIds = if (checked) selectedPlanIds + plan.id else selectedPlanIds - plan.id
-                                }
-                            )
+                        Row(modifier = Modifier.fillMaxWidth().clickable {
+                            selectedPlanIds = if (selectedPlanIds.contains(plan.id)) selectedPlanIds - plan.id else selectedPlanIds + plan.id
+                        }, verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = selectedPlanIds.contains(plan.id), onCheckedChange = { checked ->
+                                selectedPlanIds = if (checked) selectedPlanIds + plan.id else selectedPlanIds - plan.id
+                            })
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(plan.name)
                         }
@@ -1525,7 +1538,7 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
                     onClick = {
                         if (newExamTitle.isNotBlank() && selectedSubjectId != null) {
                             coroutineScope.launch {
-                                val examId = "exam_${java.util.UUID.randomUUID().toString().take(8)}"
+                                val examId = "exam_${UUID.randomUUID().toString().take(8)}"
                                 val exam = Exam(
                                     id = examId,
                                     title = newExamTitle.trim(),
@@ -1549,19 +1562,15 @@ fun AdminBulkImportView(viewModel: MedBankViewModel) {
                             }
                         }
                     }
-                ) {
-                    Text("Create")
-                }
+                ) { Text("Create") }
             },
-            dismissButton = {
-                TextButton(onClick = { showCreateExamDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+            dismissButton = { TextButton(onClick = { showCreateExamDialog = false }) { Text("Cancel") } }
         )
     }
 }
 
+        
+                
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminPlansView(viewModel: MedBankViewModel) {
