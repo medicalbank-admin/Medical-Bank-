@@ -237,36 +237,29 @@ class MedBankViewModel(application: Application) : AndroidViewModel(application)
 
 
     init {
-        // Observe user changes to update currentUser reactively
-        viewModelScope.launch {
-            currentUser.filterNotNull().collectLatest { user ->
-                // Observe user record for entitlements (SnapshotListener)
-                launch {
-                    repository.observeUser(user.uid).collect { updated ->
-                        if (updated != null) {
-                            _currentUser.value = updated
-                        }
-                    }
-                }
+    // Observe user changes to update currentUser reactively
+    viewModelScope.launch {
+        currentUser.filterNotNull().collectLatest { user ->
+            // REMOVED: The observeUser snapshot listener that was causing the session overwrite.
 
-                // Observe pending access requests
-                launch {
-                    repository.observePendingRequestsForUser(user.uid).collect { requests ->
-                        _pendingAccessRequests.value = requests.map { it.scopeId }.toSet()
-                    }
+            // Observe pending access requests
+            launch {
+                repository.observePendingRequestsForUser(user.uid).collect { requests ->
+                    _pendingAccessRequests.value = requests.map { it.scopeId }.toSet()
                 }
-
-                // Observe user exam results
-                launch {
-                    repository.observeResultsByUser(user.uid).collect { list ->
-                        _userResults.value = list.sortedByDescending { it.submittedAt }.take(200)
-                    }
-                }
-
             }
+
+            // Observe user exam results
+            launch {
+                repository.observeResultsByUser(user.uid).collect { list ->
+                    _userResults.value = list.sortedByDescending { it.submittedAt }.take(200)
+                }
+            }
+
         }
     }
-
+    }
+    
     fun setActiveTab(tab: ScreenTab) {
         _activeTab.value = tab
         if (tab == ScreenTab.ADMIN) {
